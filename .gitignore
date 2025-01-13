@@ -8,6 +8,8 @@ bootloaderAlt/build/
 cardengine_arm7/build/
 *.elf
 *.nds
+*.dsi
+*.srl
 *.NDS
 *.sav
 *.SAV

@@ -41,8 +41,8 @@ static u32 secureArea[CARD_SECURE_AREA_SIZE/sizeof(u32)];
 
 static const u8 cardSeedBytes[] = {0xE8, 0x4D, 0x5A, 0xB1, 0x17, 0x8F, 0x99, 0xD5};
 
-static u8* data_dump = 0x02E7FF80;
-static int data_pos = 0;
+//static u8* data_dump = 0x02E7FF80;
+//static int data_pos = 0;
 
 static u32 getRandomNumber(void) {
 	return 4;	// chosen by fair dice roll.

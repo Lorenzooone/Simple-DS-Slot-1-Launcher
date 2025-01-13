@@ -202,17 +202,17 @@ static void arm9_errorOutput (u32 code, bool clearBG) {
 	}		
 }
 
-static void ux_to_screen(uint16_t* vram_map, uint32_t value, size_t num_displayed_bytes) {
+static void ux_to_screen(volatile uint16_t* vram_map, uint32_t value, size_t num_displayed_bytes) {
 	size_t num_nybbles = 2 * num_displayed_bytes;
 	for(int i = 0; i < num_nybbles; i++)
 		vram_map[i] = ((value >> ((4 * (num_nybbles - 1 - i)))) & 0xF) + 1;
 }
 
-static void u8_to_screen(uint16_t* vram_map, uint8_t value) {
+static void u8_to_screen(volatile uint16_t* vram_map, uint8_t value) {
 	ux_to_screen(vram_map, value, 1);
 }
 
-static void u32_to_screen(uint16_t* vram_map, uint32_t value) {
+static void u32_to_screen(volatile uint16_t* vram_map, uint32_t value) {
 	ux_to_screen(vram_map, value, 4);
 }
 
