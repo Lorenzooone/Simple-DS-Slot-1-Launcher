@@ -32,11 +32,32 @@ sNDSHeader header;
 char padding[0x200 - sizeof(sNDSHeader)];
 } ndsHeader;
 
-void print_data(void) {
+void cart_reset() {
+	if(isDSiMode()) {
+		disableSlot1();
+		for(int i = 0; i < 10; i++)
+			swiWaitForVBlank();
+		enableSlot1();
+	}
+}
+
+void print_data() {
 	consoleClear();
+	int ram_size = 4;
+	if(isDSiMode()) {
+		PRINT_FUNCTION ("DSi - ");
+		ram_size = 16;
+	}
+	else
+		PRINT_FUNCTION ("DS - ");
+	if(isHwDebugger())
+		ram_size *= 2;
+	
+	PRINT_FUNCTION ("%dMB RAM\n", ram_size);
 	PRINT_FUNCTION ("Please insert a DS cartridge.\n");
 	PRINT_FUNCTION ("Press A to update information.\n");
 	PRINT_FUNCTION ("Press START to try to launch the game.\n\n");
+	cart_reset();
 	cardReadHeader((uint8*)&ndsHeader);
 	bool success = true;
 	if(*(u32*)&ndsHeader == 0xffffffff)
@@ -59,8 +80,10 @@ void print_data(void) {
 }
 
 bool is_card_ready(bool do_read) {
-	if(do_read)
+	if(do_read) {
+		cart_reset();
 		cardReadHeader((uint8*)&ndsHeader);
+	}
 	// Wait for card to stablize before continuing
 	for (int i = 0; i < 30; i++) { swiWaitForVBlank(); }
 	// Check header CRC
@@ -70,7 +93,6 @@ bool is_card_ready(bool do_read) {
 int main() {
 	fifoSendValue32(FIFO_PM, PM_REQ_SLEEP_DISABLE);
 
-	sysSetCardOwner (BUS_OWNER_ARM9);
 	// Reset cheat data, since we won't be using it regardless...
 	memset((void*)0x023F0000, 0, 0x8000);
 	u32 curr_keys = 0;
@@ -81,6 +103,7 @@ int main() {
 	} while((curr_keys & (KEY_DEBUG | KEY_SELECT)) && (!(curr_keys & KEY_B)));
 	bool done = false;
 
+	sysSetCardOwner (BUS_OWNER_ARM9);
 	if(!(curr_keys & KEY_B))
 		done = is_card_ready(true);
 

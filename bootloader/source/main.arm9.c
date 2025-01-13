@@ -29,6 +29,7 @@
 #define ARM9
 #undef ARM7
 #include <nds/memory.h>
+#include <nds/arm9/background.h>
 #include <nds/arm9/video.h>
 #include <nds/arm9/input.h>
 #include <nds/interrupts.h>
@@ -42,26 +43,34 @@
 #include <stdlib.h>
 
 #include "common.h"
+#include "min_font_bin.h"
 
-tNDSHeader* ndsHeader = NULL;
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// Important things
+#define NDS_HEADER         0x027FFE00
+#define NDS_HEADER_SDK5    0x02FFFE00 // __NDSHeader
+#define NDS_HEADER_POKEMON 0x027FF000
 
-bool arm9_runCardEngine = false;
-bool dsiModeConfirmed = false;
-bool arm9_boostVram = false;
-bool arm9_scfgUnlock = false;
-bool arm9_extendedMemory = false;
-bool arm9_isSdk5 = false;
+#define DSI_HEADER         0x027FE000
+#define DSI_HEADER_SDK5    0x02FFE000 // __DSiHeader
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-volatile int arm9_stateFlag = ARM9_BOOT;
-volatile u32 arm9_errorCode = 0xFFFFFFFF;
-volatile bool arm9_errorClearBG = false;
+tNDSHeader* ndsHeader;
+bool dsiModeConfirmed;
+bool arm9_boostVram;
+bool arm9_scfgUnlock;
+bool arm9_extendedMemory;
+bool arm9_isSdk5;
+bool arm9_runCardEngine;
+volatile int arm9_stateFlag;
+volatile u32 arm9_errorCode;
+volatile bool arm9_errorClearBG;
 volatile u32 arm9_BLANK_RAM = 0;
 
 /*-------------------------------------------------------------------------
 External functions
 --------------------------------------------------------------------------*/
 extern void arm9_clearCache (void);
-
 
 void initMBKARM9() {
 	// default dsiware settings
@@ -193,6 +202,51 @@ static void arm9_errorOutput (u32 code, bool clearBG) {
 	}		
 }
 
+static void ux_to_screen(uint16_t* vram_map, uint32_t value, size_t num_displayed_bytes) {
+	size_t num_nybbles = 2 * num_displayed_bytes;
+	for(int i = 0; i < num_nybbles; i++)
+		vram_map[i] = ((value >> ((4 * (num_nybbles - 1 - i)))) & 0xF) + 1;
+}
+
+static void u8_to_screen(uint16_t* vram_map, uint8_t value) {
+	ux_to_screen(vram_map, value, 1);
+}
+
+static void u32_to_screen(uint16_t* vram_map, uint32_t value) {
+	ux_to_screen(vram_map, value, 4);
+}
+
+void memory_view_to_screen(uint8_t* address) {
+	#define TILE_1D_MAP (1<<4)
+	#define ACTIVATE_SCREEN_HW (1<<16)
+	REG_POWERCNT = (vu16) (POWER_LCD | POWER_2D_A);
+	VRAM_A_CR = VRAM_ENABLE;
+	REG_DISPSTAT = 0;
+    REG_DISPCNT = 0 | TILE_1D_MAP | ACTIVATE_SCREEN_HW | (0x1 << 8);
+    REG_DISPCNT_SUB = 0 | TILE_1D_MAP | ACTIVATE_SCREEN_HW | (0x1 << 8);
+	//videoSetMode(0);
+	//videoSetModeSub(0);
+	BG_PALETTE[0] = 0x7C00;
+	BG_PALETTE[1] = 0x7FFF;
+	BG_PALETTE[2] = 0x7C00;
+	BG_PALETTE_SUB[0] = 0x7C00;
+	BG_PALETTE_SUB[1] = 0x7FFF;
+	BG_PALETTE_SUB[2] = 0x7C00;
+	REG_BG0CNT = 0x0100;
+	REG_BG0CNT_SUB = 0x0100;
+	vramSetBankA(VRAM_A_MAIN_BG);
+
+	volatile uint16_t* vram_target_map = (volatile uint16_t*)0x06000800;
+	size_t single_iter_shown = 8;
+	for(int i = 0; i < SCREEN_HEIGHT >> 3; i++) {
+		u32_to_screen(&vram_target_map[(i * (SCREEN_WIDTH >> 3))], (uintptr_t)(address + (single_iter_shown * i)));
+		int start = 9;
+		for(int j = 0; j < single_iter_shown; j++)
+			u8_to_screen(&vram_target_map[(i * (SCREEN_WIDTH >> 3)) + start + (j * 3)], address[(single_iter_shown * i) + j]);
+	}
+
+	while(REG_KEYINPUT & KEY_A);
+}
 
 /*-------------------------------------------------------------------------
 arm9_main
@@ -240,6 +294,14 @@ void __attribute__((target("arm"))) arm9_main (void) {
 		TIMER_CR(i) = 0;
 		TIMER_DATA(i) = 0;
 	}
+
+	bool ignore_min_font = true;
+	int vram_a_u16_offset = 0;
+	int vram_a_size_removed = 0;
+	if(ignore_min_font) {
+		vram_a_u16_offset = min_font_bin_size / 2;
+		vram_a_size_removed = vram_a_u16_offset * 2;
+	}
 	
 	// Clear out FIFO
 	REG_IPC_SYNC = 0;
@@ -261,7 +323,7 @@ void __attribute__((target("arm"))) arm9_main (void) {
 	dmaFill((u16*)&arm9_BLANK_RAM, OAM, 2*1024);
 	dmaFill((u16*)&arm9_BLANK_RAM, (u16*)0x04000000, 0x56);  // Clear main display registers
 	dmaFill((u16*)&arm9_BLANK_RAM, (u16*)0x04001000, 0x56);  // Clear sub display registers
-	dmaFill((u16*)&arm9_BLANK_RAM, VRAM_A, 0x20000*3);		// Banks A, B, C
+	dmaFill((u16*)&arm9_BLANK_RAM, VRAM_A + vram_a_u16_offset, (0x20000*3) - vram_a_size_removed);		// Banks A, B, C
 	dmaFill((u16*)&arm9_BLANK_RAM, VRAM_D, 272*1024);		// Banks D (excluded), E, F, G, H, I
 
 	REG_DISPSTAT = 0;
@@ -317,11 +379,16 @@ void __attribute__((target("arm"))) arm9_main (void) {
 	}
 	
 	// wait for vblank then boot
-	while (REG_VCOUNT!=191);
-	while (REG_VCOUNT==191);
-	
-	// arm9_errorOutput (*(u32*)(first), true);
+	while(REG_VCOUNT!=191);
+	while(REG_VCOUNT==191);
+	//memory_view_to_screen((uint8_t*)0x02E80000);
+	//memory_view_to_screen((uint8_t*)0x02400380);
+	//memory_view_to_screen((uint8_t*)0x4004000);
+	//memory_view_to_screen((uint8_t*)0x4000300);
+	//memory_view_to_screen((uint8_t*)0x02EC7040);
 
+	REG_IE = 0;
+	REG_IF = ~0;
 	VoidFn arm9code = (VoidFn)ndsHeader->arm9executeAddress;
 	arm9code();
 }

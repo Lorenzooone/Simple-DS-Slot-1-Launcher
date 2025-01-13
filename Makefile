@@ -54,22 +54,23 @@ ARM7DIR		:= arm7
 # --------------
 
 ROM		:= $(NAME).nds
+ROM_dsi		:= $(NAME).dsi
 
 # Targets
 # -------
 
 .PHONY: all clean arm9 arm7 cardengine_arm7 bootloader bootloaderAlt dldipatch sdimage
 
-all: $(ROM)
+all: $(ROM) $(ROM_dsi)
 
 clean:
 	@echo "  CLEAN"
 	$(V)$(MAKE) -C arm9 clean --no-print-directory
 	$(V)$(MAKE) -C arm7 clean --no-print-directory
-	$(V)$(MAKE) -C bootloader clean --no-print-directory
+	$(V)$(MAKE) -f Makefile.arm7 -C bootloader clean --no-print-directory
 	$(V)$(MAKE) -C bootloaderAlt clean --no-print-directory
 	$(V)$(MAKE) -C cardengine_arm7 clean --no-print-directory
-	$(V)$(RM) $(ROM) build $(SDIMAGE)
+	$(V)$(RM) $(ROM) $(ROM_dsi) build $(SDIMAGE)
 
 arm9: cardengine_arm7 bootloader bootloaderAlt
 	$(V)+$(MAKE) -C arm9 --no-print-directory
@@ -78,7 +79,7 @@ arm7: cardengine_arm7 bootloader bootloaderAlt
 	$(V)+$(MAKE) -C arm7 --no-print-directory
 
 bootloader: cardengine_arm7
-	$(V)+$(MAKE) -C bootloader --no-print-directory
+	$(V)+$(MAKE) -f Makefile.arm7 -C bootloader --no-print-directory
 
 bootloaderAlt: cardengine_arm7
 	$(V)+$(MAKE) -C bootloaderAlt --no-print-directory
@@ -92,6 +93,8 @@ NDSTOOL_ARGS	:= -d $(NITROFSDIR)
 
 # Make the NDS ROM depend on the filesystem only if it is needed
 $(ROM): $(NITROFSDIR)
+# Make the DSi ROM depend on the filesystem only if it is needed
+$(ROM_dsi): $(NITROFSDIR)
 endif
 
 # Combine the title strings
@@ -106,6 +109,14 @@ $(ROM): arm9 arm7
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -c $@ \
 		-7 arm7/build/arm7.elf -9 arm9/build/arm9.elf \
 		-b $(GAME_ICON) "$(GAME_FULL_TITLE)" \
+		$(NDSTOOL_FAT)
+
+$(ROM_dsi): arm9 arm7
+	@echo "  NDSTOOL $@"
+	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -c $@ \
+		-7 arm7/build/arm7.elf -9 arm9/build/arm9.elf \
+		-b $(GAME_ICON) "$(GAME_FULL_TITLE)" \
+		-g SL1L 00 "SLOT1LAUNCH" -z 93FFFB06h -u 00030004 \
 		$(NDSTOOL_FAT)
 
 sdimage:

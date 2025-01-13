@@ -9,48 +9,56 @@ void dsi_set_key( dsi_context* ctx,
 				 const unsigned char key[16] )
 {
 	unsigned char keyswap[16];
-	u128_swap(keyswap, key) ;
+  u128_swap(keyswap, key) ;
 
 	aes_setkey_enc(&ctx->aes, keyswap, 128);
 }
 
 void dsi_add_ctr( dsi_context* ctx,
                   unsigned int carry)
-{
-	unsigned int counter[4];
-	unsigned char *outctr = (unsigned char*)ctx->ctr;
-	int sum;
-	signed int i;
+{    
+    unsigned int counter[4];
+    unsigned char *outctr = (unsigned char*)ctx->ctr;
+    int sum;
+    signed int i;
 
-	for (i = 0; i < 4; i++)
-		counter[i] = (outctr[i * 4 + 0] << 24) | (outctr[i * 4 + 1] << 16) |
-		             (outctr[i * 4 + 2] <<  8) | (outctr[i * 4 + 3] << 0);
+    for(i = 0; i < 4; i++)
+        counter[i] = (outctr[i * 4 + 0] << 24) | (outctr[i * 4 + 1] << 16) |
+                     (outctr[i * 4 + 2] <<  8) | (outctr[i * 4 + 3] << 0);
 
-	for (i = 3; i >= 0; i--) {
-		sum = counter[i] + carry;
-		carry = (uint32_t)(sum < counter[i]);
+    for(i = 3; i >= 0; i--)
+    {
+        sum = counter[i] + carry;
 
-		counter[i] = sum;
-	}
+        if (sum < counter[i])
+            carry = 1;
+        else
+            carry = 0;
 
-	for (i = 0; i < 4; i++) {
-		outctr[i * 4 + 0] = counter[i] >> 24;
-		outctr[i * 4 + 1] = counter[i] >> 16;
-		outctr[i * 4 + 2] = counter[i] >> 8;
-		outctr[i * 4 + 3] = counter[i] >> 0;
-	}
+        counter[i] = sum;
+    }
+
+    for(i = 0; i < 4; i++)
+    {
+        outctr[i * 4 + 0] = counter[i] >> 24;
+        outctr[i * 4 + 1] = counter[i] >> 16;
+        outctr[i * 4 + 2] = counter[i] >> 8;
+        outctr[i * 4 + 3] = counter[i] >> 0;
+    }
 }
-
+				  
 void dsi_set_ctr( dsi_context* ctx,
 				  const unsigned char ctr[16] )
 {
-	for (int i = 0; i < 16; i++)
+	int i;
+
+	for(i=0; i<16; i++)
 		ctx->ctr[i] = ctr[15-i];
 }
 
 void dsi_init_ctr( dsi_context* ctx,
 				   const unsigned char key[16],
-				   const unsigned char ctr[12] )
+				   const unsigned char ctr[16] )
 {
 	dsi_set_key(ctx, key);
 	dsi_set_ctr(ctx, ctr);
@@ -61,10 +69,11 @@ void dsi_crypt_ctr( dsi_context* ctx,
                     void* out,
                     unsigned int len)
 {
-	unsigned int i;
-	for (i = 0; i < len; i += 0x10) {
-		dsi_crypt_ctr_block(ctx, in+i, out+i);
-	}
+    unsigned int i;
+    for(i = 0; i < len; i += 0x10)
+		{
+        dsi_crypt_ctr_block(ctx, in+i, out+i);
+		}
 }
 
 void dsi_crypt_ctr_block( dsi_context* ctx, 
@@ -78,12 +87,16 @@ void dsi_crypt_ctr_block( dsi_context* ctx,
 	aes_crypt_ecb(&ctx->aes, AES_ENCRYPT, ctx->ctr, stream);
 
 
-	if (input) {
-		for (i=0; i<16; i++) {
+	if (input)
+	{
+		for(i=0; i<16; i++)
+		{
 			output[i] = stream[15-i] ^ input[i];
 		}
-	} else {
-		for (i=0; i<16; i++)
+	}
+	else
+	{
+		for(i=0; i<16; i++)
 			output[i] = stream[15-i];
 	}
 
@@ -100,6 +113,8 @@ void dsi_init_ccm( dsi_context* ctx,
 {
 	int i;
 
+
+
 	dsi_set_key(ctx, key);
 
 	ctx->maclen = maclength;
@@ -113,7 +128,7 @@ void dsi_init_ccm( dsi_context* ctx,
 	ctx->mac[0] = (maclength<<3) | 2;
 	if (assoclength)
 		ctx->mac[0] |= (1<<6);
-	for (i=0; i<12; i++)
+	for(i=0; i<12; i++)
 		ctx->mac[1+i] = nonce[11-i];
 	ctx->mac[13] = payloadlength>>16;
 	ctx->mac[14] = payloadlength>>8;
@@ -124,7 +139,7 @@ void dsi_init_ccm( dsi_context* ctx,
 	// CCM CTR:
 	// [1-byte flags] [12-byte nonce] [3-byte ctr]
 	ctx->ctr[0] = 2;
-	for (i=0; i<12; i++)
+	for(i=0; i<12; i++)
 		ctx->ctr[1+i] = nonce[11-i];
 	ctx->ctr[13] = 0;
 	ctx->ctr[14] = 0;
@@ -140,13 +155,14 @@ void dsi_encrypt_ccm_block( dsi_context* ctx,
 {
 	int i;
 
-	for (i=0; i<16; i++)
+	for(i=0; i<16; i++)
 		ctx->mac[i] ^= input[15-i];
 
 	aes_crypt_ecb(&ctx->aes, AES_ENCRYPT, ctx->mac, ctx->mac);
 
-	if (mac) {
-		for (i=0; i<16; i++)
+	if (mac)
+	{
+		for(i=0; i<16; i++)
 			mac[i] = ctx->mac[15-i] ^ ctx->S0[i];
 	}
 
@@ -163,22 +179,26 @@ void dsi_decrypt_ccm_block( dsi_context* ctx,
 	int i;
 
 
-	if (output) {
+	if (output)
+	{
 		dsi_crypt_ctr_block(ctx, input, output);
 
 
-		for (i=0; i<16; i++)
+		for(i=0; i<16; i++)
 			ctx->mac[i] ^= output[15-i];
-	} else {
-		for (i=0; i<16; i++)
+	}
+	else
+	{
+		for(i=0; i<16; i++)
 			ctx->mac[i] ^= input[15-i];
 	}
 
 	aes_crypt_ecb(&ctx->aes, AES_ENCRYPT, ctx->mac, ctx->mac);
 
 
-	if (mac) {
-		for (i=0; i<16; i++)
+	if (mac)
+	{
+		for(i=0; i<16; i++)
 			mac[i] = ctx->mac[15-i] ^ ctx->S0[i];
 	}
 }
@@ -193,7 +213,8 @@ void dsi_decrypt_ccm( dsi_context* ctx,
 	unsigned char block[16];
 	unsigned char ctr[16];
 
-	while (size > 16) {
+	while(size > 16)
+	{
 		dsi_decrypt_ccm_block(ctx, input, output, mac);
 
 		if (input)
@@ -224,7 +245,8 @@ void dsi_encrypt_ccm( dsi_context* ctx,
 {
 	unsigned char block[16];
 
-	while (size > 16) {
+	while(size > 16)
+	{
 		dsi_encrypt_ccm_block(ctx, input, output, mac);
 
 		if (input)
@@ -259,6 +281,7 @@ void dsi_es_set_random_nonce( dsi_es_context* ctx )
 {
 	ctx->randomnonce = 1;
 }
+							 
 
 int dsi_es_decrypt( dsi_es_context* ctx,
 				    unsigned char* buffer,
@@ -287,23 +310,26 @@ int dsi_es_decrypt( dsi_es_context* ctx,
 
 	chksize = (scratchpad[13]<<16) | (scratchpad[14]<<8) | (scratchpad[15]<<0);
 
-	if (scratchpad[0] != 0x3A) {
+	if (scratchpad[0] != 0x3A)
+  {
 		return -1;
-	}
-
-	if (chksize != size) {
-		return -2;
-	}
+  }
+     
+  if (chksize != size)
+  {
+      return -2;
+  }
 
 	memcpy(nonce, metablock + 17, 12);
 
 	dsi_init_ccm(&cryptoctx, ctx->key, 16, size, 0, nonce);
 	dsi_decrypt_ccm(&cryptoctx, buffer, buffer, size, genmac);
 
-	if (memcmp(genmac, chkmac, 16) != 0) {
+	if (memcmp(genmac, chkmac, 16) != 0)
+  {
 		return -3;
-	}
-
+  }
+  
 	return 0;
 }
 
@@ -320,12 +346,15 @@ void dsi_es_encrypt( dsi_es_context* ctx,
 	unsigned char scratchpad[16];
 	dsi_context cryptoctx;
 
-	if (ctx->randomnonce) {
+	if (ctx->randomnonce)
+	{
 		srand( (unsigned int)time(0) );
 
-		for (i=0; i<12; i++)
+		for(i=0; i<12; i++)
 			nonce[i] = rand();
-	} else {
+	}
+	else
+	{
 		memcpy(nonce, ctx->nonce, 12);
 	}
 

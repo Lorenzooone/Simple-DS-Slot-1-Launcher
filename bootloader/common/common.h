@@ -53,6 +53,7 @@
 #define ARM9_BOOTBIN 4
 #define ARM9_DISPERR 5
 #define ARM9_SETSCFG 6
+#define ARM9_READCART 7
 //};
 
 extern tNDSHeader* ndsHeader;
@@ -61,6 +62,7 @@ extern bool arm9_boostVram;
 extern bool arm9_scfgUnlock;
 extern bool arm9_extendedMemory;
 extern bool arm9_isSdk5;
+extern bool arm9_runCardEngine;
 extern volatile int arm9_stateFlag;
 extern volatile u32 arm9_errorCode;
 extern volatile bool arm9_errorClearBG;

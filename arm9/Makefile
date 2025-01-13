@@ -56,7 +56,7 @@ endif
 SOURCEDIRS	:= source ../common/source/tonccpy
 INCLUDEDIRS	:= source $(BUILDDIR) ../common/include
 GFXDIRS		:=
-BINDIRS		:=
+BINDIRS		:= ../data
 AUDIODIRS	:=
 
 # Source files
@@ -121,10 +121,10 @@ LDFLAGS		:= $(ARCH) $(LIBDIRSFLAGS) -Wl,-Map,$(MAP) $(DEFINES) \
 # ------------------------
 
 OBJS_ASSETS	:= $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_BIN))) \
-		   $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_PNG))) $(BUILDDIR)/load.bin.o $(BUILDDIR)/loadAlt.bin.o
+		   $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_PNG)))
 
 HEADERS_ASSETS	:= $(patsubst %.bin,%_bin.h,$(addprefix $(BUILDDIR)/,$(SOURCES_BIN))) \
-		   $(patsubst %.png,%.h,$(addprefix $(BUILDDIR)/,$(SOURCES_PNG))) $(BUILDDIR)/load_bin.h $(BUILDDIR)/loadAlt_bin.h
+		   $(patsubst %.png,%.h,$(addprefix $(BUILDDIR)/,$(SOURCES_PNG)))
 
 ifneq ($(SOURCES_AUDIO),)
     OBJS_ASSETS		+= $(SOUNDBANKDIR)/soundbank.c.o
@@ -159,14 +159,6 @@ dump: $(DUMP)
 clean:
 	@echo "  CLEAN.9"
 	$(V)$(RM) $(ELF) $(DUMP) $(MAP) $(BUILDDIR)
-
-$(BUILDDIR)/loadAlt.bin:
-	@$(MKDIR) -p $(@D)
-	@cp ../data/loadAlt.bin $(BUILDDIR)/loadAlt.bin
-
-$(BUILDDIR)/load.bin:
-	@$(MKDIR) -p $(@D)
-	@cp ../data/load.bin $(BUILDDIR)/load.bin
 
 # Rules
 # -----
