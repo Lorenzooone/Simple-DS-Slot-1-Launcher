@@ -852,7 +852,7 @@ void arm7_main (void) {
 	//debugOutput (ERR_STS_CLR_MEM);
 
 	// Get ARM7 to clear RAM
-	arm7_resetMemory();	
+	arm7_resetMemory();
 
 	//debugOutput (ERR_STS_LOAD_BIN);
 
@@ -976,10 +976,8 @@ void arm7_main (void) {
 			if (!sdAccess) {
 				REG_SCFG_EXT = 0x93FBFB06;
 			}
-			volatile uint8_t* dsi_not_cleaned_info = (volatile uint8_t*)0x0380FFC0;
-			for(int i = 0; i < 0x10; i++)
-				dsi_not_cleaned_info[i] = 0;
-			}
+			toncset((volatile uint8_t*)0x0380FFC0, 0, 0x10);
+		}
 	}
 
 	if (isDSiMode() && isDSBrowser) {

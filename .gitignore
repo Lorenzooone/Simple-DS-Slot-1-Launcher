@@ -13,6 +13,7 @@ cardengine_arm7/build/
 *.NDS
 *.sav
 *.SAV
+*.o
 *.py
 settings.sh
 __pycache__/

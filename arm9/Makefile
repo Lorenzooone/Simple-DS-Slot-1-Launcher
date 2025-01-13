@@ -86,7 +86,7 @@ SOURCES_CPP	:= $(shell find -L $(SOURCEDIRS) -name "*.cpp")
 
 ARCH		:= -mthumb -mcpu=arm946e-s+nofp
 
-SPECS		:= $(BLOCKSDS)/sys/crts/ds_arm9.specs
+SPECS		:= ds_arm9.specs
 
 WARNFLAGS	:= -Wall
 
