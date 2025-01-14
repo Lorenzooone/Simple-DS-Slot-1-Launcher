@@ -13,7 +13,7 @@ NAME		:= slot1launch
 GAME_TITLE	:= Slot-1 Launcher
 GAME_SUBTITLE	:= Launch the Cartridge in Slot 1
 GAME_AUTHOR	:= Lorenzooone
-GAME_ICON	:= icon.bmp
+GAME_ICON	:= icon.png
 
 # DLDI and internal SD slot of DSi
 # --------------------------------

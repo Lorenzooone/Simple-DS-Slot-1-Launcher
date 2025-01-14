@@ -9,10 +9,16 @@ cardengine_arm7/build/
 *.elf
 *.nds
 *.dsi
+*.DSI
 *.srl
+*.SRL
+*.SRLDR
+*.srldr
 *.NDS
 *.sav
 *.SAV
+*.tad
+*.TAD
 *.o
 *.py
 settings.sh

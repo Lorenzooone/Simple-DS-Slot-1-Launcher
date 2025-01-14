@@ -83,6 +83,9 @@ int twlCfgLang = 0;
 
 bool gameSoftReset = false;
 
+// For debugging
+extern volatile uint32_t data_saved[4];
+
 void arm7_clearmem (void* loc, size_t len);
 
 static const u32 cheatDataEndSignature[2] = {0xCF000000, 0x00000000};
@@ -978,6 +981,14 @@ void arm7_main (void) {
 			}
 			toncset((volatile uint8_t*)0x0380FFC0, 0, 0x10);
 		}
+		// TODO: once blocksds updates, make this simpler...
+		uint32_t old_appflags = __DSiHeader->appflags;
+		__DSiHeader->appflags |= 1;
+		if(soundFreq)
+			soundExtSetFrequencyTWL(48);
+		else
+			soundExtSetFrequencyTWL(32);
+		__DSiHeader->appflags = old_appflags;
 	}
 
 	if (isDSiMode() && isDSBrowser) {

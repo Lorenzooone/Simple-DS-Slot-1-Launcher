@@ -25,7 +25,24 @@
 extern "C" {
 #endif
 
-void runLaunchEngine (bool altBootloader, bool isDSBrowser);
+#ifndef PACKED
+#define PACKED __attribute__((packed))
+#endif
+#define ALIGNED(x) __attribute__((aligned(x)))
+
+struct launch_engine_data_t {
+	int scfgUnlock;
+	int sdaccess;
+	int twlmode;
+	int twlclk;
+	int twlvram;
+	int twltouch;
+	int soundFreq;
+	int runCardEngine;
+	int language;
+} PACKED ALIGNED(4);
+
+void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, bool isDSBrowser);
 
 #ifdef __cplusplus
 }

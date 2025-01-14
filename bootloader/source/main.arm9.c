@@ -66,6 +66,8 @@ volatile int arm9_stateFlag;
 volatile u32 arm9_errorCode;
 volatile bool arm9_errorClearBG;
 volatile u32 arm9_BLANK_RAM = 0;
+
+// For debugging
 volatile uint32_t data_saved[4];
 
 /*-------------------------------------------------------------------------
@@ -385,7 +387,7 @@ void __attribute__((target("arm"))) arm9_main (void) {
 	//memory_view_to_screen((uint8_t*)0x02E80000);
 	//memory_view_to_screen((uint8_t*)0x02400380);
 	//memory_view_to_screen((uint8_t*)0x4004000);
-	//memory_view_to_screen((uint8_t*)0x02000400);
+	//memory_view_to_screen((uint8_t*)data_saved);
 	//memory_view_to_screen((uint8_t*)0x02EC7040);
 
 	REG_IE = 0;

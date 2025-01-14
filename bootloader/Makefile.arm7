@@ -66,6 +66,7 @@ ifneq ($(BINDIRS),)
     SOURCES_BIN	:= $(shell find -L $(BINDIRS) -name "*.bin")
     INCLUDEDIRS	+= $(addprefix $(BUILDDIR)/,$(BINDIRS))
 endif
+SOURCES_BIN := $(filter-out $(OUTPUT), $(SOURCES_BIN))
 
 SOURCES_S	:= $(shell find -L $(SOURCEDIRS) -name "*.s")
 SOURCES_C	:= $(shell find -L $(SOURCEDIRS) -name "*.c")
