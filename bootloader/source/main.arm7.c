@@ -77,6 +77,7 @@ extern u32 boostVram;
 extern u32 twlTouch;
 extern u32 soundFreq;
 extern u32 runCardEngine;
+extern u32 skipcrccheck;
 
 bool useTwlCfg = false;
 int twlCfgLang = 0;
@@ -669,7 +670,7 @@ int arm7_loadBinary (const tDSiHeader* dsiHeaderTemp) {
 	u32 errorCode;
 	
 	// Init card
-	errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, false);
+	errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, false, skipcrccheck == 1);
 	if (errorCode) {
 		return errorCode;
 	}

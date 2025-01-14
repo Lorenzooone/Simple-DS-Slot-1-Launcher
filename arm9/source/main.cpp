@@ -27,7 +27,7 @@
 #include "nds_card.h"
 #include "launch_engine.h"
 
-#define SAVED_VERSION 0x1000000
+#define SAVED_VERSION 0x1000001
 
 #define DEFAULT_SCFGUNLOCK_DSI 0
 #define DEFAULT_SDACCESS_DSI 1
@@ -37,6 +37,7 @@
 #define DEFAULT_TWLTOUCH_DSI 1
 #define DEFAULT_SOUNDFREQ_DSI 0
 #define DEFAULT_CARDENGINE_DSI 0
+#define DEFAULT_SKIPCRCCHECK_DSI 0
 
 #define DEFAULT_SCFGUNLOCK_DS 0
 #define DEFAULT_SDACCESS_DS 0
@@ -46,6 +47,7 @@
 #define DEFAULT_TWLTOUCH_DS 0
 #define DEFAULT_SOUNDFREQ_DS 0
 #define DEFAULT_CARDENGINE_DS 0
+#define DEFAULT_SKIPCRCCHECK_DS 0
 
 #define DEFAULT_AUTOBOOT 1
 
@@ -84,6 +86,7 @@ int *settings_options_dsi[] = {
 	&all_options_data.all_saved_data.launch_engine_data.soundFreq,
 	&all_options_data.all_saved_data.launch_engine_data.sdaccess,
 	&all_options_data.all_saved_data.launch_engine_data.scfgUnlock,
+	&all_options_data.all_saved_data.launch_engine_data.skipcrccheck,
 	&all_options_data.all_saved_data.autoboot,
 	&all_options_data.save_to_sd,
 	&all_options_data.reset_to_dsi_mode,
@@ -93,12 +96,13 @@ int *settings_options_dsi[] = {
 
 int *settings_options_ds[] = {
 	&all_options_data.all_saved_data.launch_engine_data.language,
+	&all_options_data.all_saved_data.launch_engine_data.skipcrccheck,
 	&all_options_data.reset_to_defaults,
 };
 
 #define NUM_SETTINGS_OPTIONS_DSI (sizeof(settings_options_dsi) / sizeof(settings_options_dsi[0]))
 #define NUM_SETTINGS_OPTIONS_DS (sizeof(settings_options_ds) / sizeof(settings_options_ds[0]))
-#define SETTING_OPTIONS_VALUE_X_POSITION 16
+#define SETTING_OPTIONS_VALUE_X_POSITION 19
 #define PRINT_FUNCTION printf
 #define NUM_LANGUAGES_DS 7
 #define NUM_LANGUAGES_STRINGS (NUM_LANGUAGES_DS + 1)
@@ -123,6 +127,7 @@ void reset_all_saved_data(struct all_saved_data_t* all_saved_data) {
 	all_saved_data->launch_engine_data.soundFreq = DEFAULT_VALUE_GENERIC;
 	all_saved_data->launch_engine_data.sdaccess = DEFAULT_VALUE_GENERIC;
 	all_saved_data->launch_engine_data.scfgUnlock = DEFAULT_VALUE_GENERIC;
+	all_saved_data->launch_engine_data.skipcrccheck = DEFAULT_VALUE_GENERIC;
 	all_saved_data->autoboot = DEFAULT_AUTOBOOT;
 }
 
@@ -184,6 +189,8 @@ static void setup_defaults(struct launch_engine_data_t* launch_engine_data) {
 		launch_engine_data->twlvram = 0;
 		launch_engine_data->twltouch = 0;
 		launch_engine_data->soundFreq = 0;
+		if(launch_engine_data->skipcrccheck == DEFAULT_VALUE_GENERIC)
+			launch_engine_data->skipcrccheck = DEFAULT_SKIPCRCCHECK_DS;
 		return;
 	}
 	set_default_val(&launch_engine_data->scfgUnlock, DEFAULT_SCFGUNLOCK_DS, DEFAULT_SCFGUNLOCK_DSI);
@@ -193,10 +200,11 @@ static void setup_defaults(struct launch_engine_data_t* launch_engine_data) {
 	set_default_val(&launch_engine_data->twlvram, DEFAULT_TWLVRAM_DS, DEFAULT_TWLVRAM_DSI);
 	set_default_val(&launch_engine_data->twltouch, DEFAULT_TWLTOUCH_DS, DEFAULT_TWLTOUCH_DSI);
 	set_default_val(&launch_engine_data->soundFreq, DEFAULT_SOUNDFREQ_DS, DEFAULT_SOUNDFREQ_DSI);
+	set_default_val(&launch_engine_data->skipcrccheck, DEFAULT_SKIPCRCCHECK_DS, DEFAULT_SKIPCRCCHECK_DSI);
 }
 
-static bool is_read_header_right() {
-	return ndsHeader.header.headerCRC16 == swiCRC16(0xFFFF, (void*)&ndsHeader, 0x15E);
+static bool is_read_header_right(bool skipcrccheck) {
+	return skipcrccheck || (ndsHeader.header.headerCRC16 == swiCRC16(0xFFFF, (void*)&ndsHeader, 0x15E));
 }
 
 static void cartridge_read_header_data_total() {
@@ -204,13 +212,13 @@ static void cartridge_read_header_data_total() {
 	cardReadHeader((uint8*)&ndsHeader);
 }
 
-bool is_card_ready(bool do_read) {
+bool is_card_ready(bool do_read, bool skipcrccheck) {
 	if(do_read)
 		cartridge_read_header_data_total();
 	// Wait for card to stablize before continuing
 	for (int i = 0; i < 30; i++) { swiWaitForVBlank(); }
 	// Check header CRC
-	return is_read_header_right();
+	return is_read_header_right(skipcrccheck);
 }
 
 static void update_console_x_pos() {
@@ -218,6 +226,20 @@ static void update_console_x_pos() {
 	int y = 0;
 	consoleGetCursor(NULL, &x, &y);
 	consoleSetCursor(NULL, SETTING_OPTIONS_VALUE_X_POSITION, y);
+}
+
+void print_setting_option_three(int value, const char* option_name, const char* off_value, const char* on_value, const char* force_value) {
+	PRINT_FUNCTION(option_name);
+	PRINT_FUNCTION(":");
+	update_console_x_pos();
+	if(value == DEFAULT_VALUE_GENERIC)
+		PRINT_FUNCTION("Default");
+	else if(value == 0)
+		PRINT_FUNCTION(off_value);
+	else if(value == 1)
+		PRINT_FUNCTION(on_value);
+	else
+		PRINT_FUNCTION(force_value);
 }
 
 void print_setting_option(int value, const char* option_name, const char* off_value, const char* on_value) {
@@ -266,7 +288,7 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 	bool success = true;
 	if(*(u32*)&ndsHeader == 0xffffffff)
 		success = false;
-	if(!is_read_header_right())
+	if(!is_read_header_right(all_options_data->all_saved_data.launch_engine_data.skipcrccheck == 1))
 		success = false;
 	char name[256];
 	sprintf(&name[0], "----");
@@ -302,7 +324,7 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 		else
 			PRINT_FUNCTION(" ");
 		if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twlmode))
-			print_setting_option(*settings_options[i], "DS/DSi Mode", "DS", "DSi");
+			print_setting_option_three(*settings_options[i], "DS/DSi Mode", "DS", "DSi", "Force DSi");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twlclk))
 			print_setting_option(*settings_options[i], "CPU Speed", "67MHz", "133MHz");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twlvram))
@@ -319,6 +341,8 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 			print_language_to_console(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.autoboot))
 			print_setting_option(*settings_options[i], "Autoboot", "Off", "On");
+		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.skipcrccheck))
+			print_setting_option(*settings_options[i], "Skip CRC Check", "Off", "On");
 		else if(settings_options[i] == (&all_options_data->save_to_sd))
 			PRINT_FUNCTION("Save default to SD");
 		else if(settings_options[i] == (&all_options_data->reset_to_ds_mode))
@@ -380,7 +404,7 @@ static void input_processing(u32 curr_keys, struct all_options_data_t* all_optio
 	if((curr_keys & KEY_LEFT) || (curr_keys & KEY_RIGHT) || (curr_keys & KEY_A)) {
 		int i = all_options_data->cursor_index;
 		if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twlmode))
-			fix_data_two_val_default(settings_options[i]);
+			fix_data_x_val_default(settings_options[i], 3);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twlclk))
 			fix_data_two_val_default(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twlvram))
@@ -392,6 +416,8 @@ static void input_processing(u32 curr_keys, struct all_options_data_t* all_optio
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.soundFreq))
 			fix_data_two_val_default(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.scfgUnlock))
+			fix_data_two_val_default(settings_options[i]);
+		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.skipcrccheck))
 			fix_data_two_val_default(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.language))
 			fix_data_x_val_default(settings_options[i], NUM_LANGUAGES_DS);
@@ -451,7 +477,7 @@ int main() {
 
 	sysSetCardOwner (BUS_OWNER_ARM9);
 	if((!(curr_keys & KEY_B)) && all_options_data.all_saved_data.autoboot)
-		done = is_card_ready(true);
+		done = is_card_ready(true, all_options_data.all_saved_data.launch_engine_data.skipcrccheck == 1);
 	else
 		cartridge_read_header_data_total();
 		
@@ -474,9 +500,9 @@ int main() {
 		print_data(debugger_type, &all_options_data);
 
 		if(curr_keys & KEY_START) {
-			done = is_card_ready(false);
+			done = is_card_ready(false, all_options_data.all_saved_data.launch_engine_data.skipcrccheck == 1);
 			if(!done)
-				done = is_card_ready(true);
+				done = is_card_ready(true, all_options_data.all_saved_data.launch_engine_data.skipcrccheck == 1);
 		}
 	}
 

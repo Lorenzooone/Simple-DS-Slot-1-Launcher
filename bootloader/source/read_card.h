@@ -31,7 +31,7 @@
 #define CARD_DATA_OFFSET (0x8000)
 #define CARD_DATA_BLOCK_SIZE (0x200)
 
-int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset);
+int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, bool skipcrccheck);
 
 void cardReadDirect (u32 src, u32* dest, size_t size);
 

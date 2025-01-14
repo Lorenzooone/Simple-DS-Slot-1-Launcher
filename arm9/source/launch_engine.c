@@ -37,6 +37,7 @@
 #define TWLTOUCH_OFFSET 32
 #define SOUNDFREQ_OFFSET 36
 #define RUNCARDENGINE_OFFSET 40
+#define SKIPCRCCHECK_OFFSET 44
 
 void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, bool isDSBrowser)
 {
@@ -67,6 +68,7 @@ void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBo
 	toncset32 ((u8*)LCDC_BANK_D+TWLTOUCH_OFFSET, launch_engine_data->twltouch, 1);
 	toncset32 ((u8*)LCDC_BANK_D+SOUNDFREQ_OFFSET, launch_engine_data->soundFreq, 1);
 	toncset32 ((u8*)LCDC_BANK_D+RUNCARDENGINE_OFFSET, launch_engine_data->runCardEngine, 1);
+	toncset32 ((u8*)LCDC_BANK_D+SKIPCRCCHECK_OFFSET, launch_engine_data->skipcrccheck, 1);
 
 	irqDisable(IRQ_ALL);
 

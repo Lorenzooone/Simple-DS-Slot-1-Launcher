@@ -401,7 +401,7 @@ void switchToRegularBlowfish(sNDSHeaderExt* ndsHeader) {
 }
 */
 
-int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
+int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, bool skipcrccheck)
 {
 	u32 portFlagsKey1, portFlagsSecRead;
 	twlBlowfish = false;
@@ -445,8 +445,11 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 		tonccpy(ndsHeader, headerData, 0x1000);
 	}
 
+	if(skipcrccheck)
+		ndsHeader->headerCRC16 = swiCRC16(0xFFFF, (void*)ndsHeader, 0x15E);
+
 	// Check header CRC
-	if (ndsHeader->headerCRC16 != swiCRC16(0xFFFF, (void*)ndsHeader, 0x15E)) {
+	if(ndsHeader->headerCRC16 != swiCRC16(0xFFFF, (void*)ndsHeader, 0x15E)) {
 		return ERR_HEAD_CRC;
 	}
 
