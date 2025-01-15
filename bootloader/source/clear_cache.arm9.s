@@ -21,6 +21,12 @@
 
 .arm
 
+BEGIN_ASM_FUNC arm9_flush_cache
+	mov r3, #0                  
+	mcr p15, 0, r3, c7, c5, 0		@ Flush ICache
+	mcr p15, 0, r3, c7, c6, 0		@ Flush DCache
+	bx lr
+
 BEGIN_ASM_FUNC arm9_clearCache
 	@ Clean and flush cache
 	mov r1, #0                   

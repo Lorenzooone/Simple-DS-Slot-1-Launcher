@@ -11,7 +11,6 @@
 	.global twlTouch
 	.global soundFreq
 	.global runCardEngine
-	.global skipcrccheck
 @---------------------------------------------------------------------------------
 	.align	4
 	.arm
@@ -39,8 +38,6 @@ twlTouch:
 soundFreq:
 	.word	0x00000000
 runCardEngine:
-	.word	0x00000000
-skipcrccheck:
 	.word	0x00000000
 
 startUp:

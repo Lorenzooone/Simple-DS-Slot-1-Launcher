@@ -48,8 +48,6 @@
 #define NULL 0
 #endif
 
-#define REG_GPIO_WIFI *(vu16*)0x4004C04
-
 #include "common.h"
 #include "dmaTwl.h"
 #include "tonccpy.h"
@@ -77,7 +75,6 @@ extern u32 boostVram;
 extern u32 twlTouch;
 extern u32 soundFreq;
 extern u32 runCardEngine;
-extern u32 skipcrccheck;
 
 bool useTwlCfg = false;
 int twlCfgLang = 0;
@@ -670,7 +667,7 @@ int arm7_loadBinary (const tDSiHeader* dsiHeaderTemp) {
 	u32 errorCode;
 	
 	// Init card
-	errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, false, skipcrccheck == 1);
+	errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, true);
 	if (errorCode) {
 		return errorCode;
 	}
@@ -980,7 +977,7 @@ void arm7_main (void) {
 			if (!sdAccess) {
 				REG_SCFG_EXT = 0x93FBFB06;
 			}
-			toncset((volatile uint8_t*)0x0380FFC0, 0, 0x10);
+			toncset((uint8_t*)0x0380FFC0, 0, 0x10);
 		}
 		// TODO: once blocksds updates, make this simpler...
 		uint32_t old_appflags = __DSiHeader->appflags;

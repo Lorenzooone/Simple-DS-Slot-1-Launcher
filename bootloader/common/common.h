@@ -53,7 +53,7 @@
 #define ARM9_BOOTBIN 4
 #define ARM9_DISPERR 5
 #define ARM9_SETSCFG 6
-#define ARM9_READCART 7
+#define ARM9_NTRCARTINIT 7
 //};
 
 extern tNDSHeader* ndsHeader;

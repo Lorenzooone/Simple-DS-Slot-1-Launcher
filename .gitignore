@@ -19,6 +19,8 @@ cardengine_arm7/build/
 *.SAV
 *.tad
 *.TAD
+*.ZIP
+*.zip
 *.o
 *.py
 settings.sh

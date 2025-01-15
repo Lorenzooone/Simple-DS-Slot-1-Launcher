@@ -2,7 +2,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-//static uint32_t curr_payload_pos = 0x023C0000;
+/*
+static uint32_t curr_payload_pos = 0x02200000;
 
 static void write_le32(volatile uint8_t* ptr, uint32_t value) {
 	for(int i = 0; i < 4; i++)
@@ -31,16 +32,17 @@ static void create_connection_to_pos(volatile uint8_t* write_pos, uintptr_t jump
 		write_le16(write_pos + 2, code_top);
 	}
 }
+*/
 
 void insert_arm9_payload() {
 	/*
 	//ARM9
 	#define NUM_CONNECT_INST 1
-	#define NUM_INST (32 + NUM_CONNECT_INST)
+	#define NUM_INST (41 + NUM_CONNECT_INST)
 
-	uint32_t instructions[NUM_INST] = {0xE92D0003, 0xE3A00301, 0xE2800001, 0xE5800207, 0xE3A01801, 0xE2811EF1, 0xE5801000, 0xE2800A01, 0xE5801000, 0xE280006C, 0xE3A01000, 0xE5801000, 0xE2400A01, 0xE5801000, 0xE3A01405, 0xE3A0001F, 0xE1C100B0, 0xE2811B01, 0xE1C100B0, 0xE3A01301, 0xE2811E13, 0xE5910000, 0xE2000001, 0xE3500001, 0x0AFFFFFB, 0xE3A01405, 0xE3A00B1F, 0xE1C100B0, 0xE2811B01, 0xE1C100B0, 0xE8BD0003,
+	uint32_t instructions[NUM_INST] = {0xE92D0003, 0xE3A00301, 0xE3A00301, 0xE3A00301, 0xE2800D09, 0xE3A01081, 0xE5C01000, 0xE3A01084, 0xE5C01002, 0xE3A01C82, 0xE2811003, 0xE58010C4, 0xE3A00301, 0xE3A01801, 0xE2811EF1, 0xE5801000, 0xE2800A01, 0xE5801000, 0xE280006C, 0xE3A01000, 0xE5801000, 0xE2400A01, 0xE5801000, 0xE3A01405, 0xE3A0001F, 0xE1C100B0, 0xE2811B01, 0xE1C100B0, 0xE3A01301, 0xE2811E13, 0xE5910000, 0xE2000001, 0xE3500001, 0x0AFFFFFB, 0xE3A01405, 0xE3A00B1F, 0xE1C100B0, 0xE2811B01, 0xE1C100B0, 0xE8BD0003,
 	// End of payload, place instructions to connect back below...
-	0xE5840038,
+	0xE3A00000,
 	// Returns back
 	0xE12FFF1E};
 	*/
@@ -50,6 +52,7 @@ void insert_arm9_payload() {
 	0xE5840038,
 	// Returns back
 	0xE12FFF1E};
+	*/
 	/*
 	#define NUM_CONNECT_INST 1
 	#define NUM_INST (32 + NUM_CONNECT_INST)
@@ -66,7 +69,7 @@ void insert_arm9_payload() {
 	#define NUM_COPY_INST (8 + NUM_CONNECT_COPY_INST)
 	uint32_t instructions_copy_payload[NUM_COPY_INST] = {0, 0, 0xE92D0003, 0xE51F0010, 0xE51F1018, 0xE5801000, 0xE8BD0003,
 	// End of payload, place instructions to connect back below...
-	0xE3A01000,
+	0xE5810000,
 	// Returns back
 	0xE12FFF1E};
 	volatile uint8_t* payload_pos= (volatile uint8_t*)curr_payload_pos;
@@ -77,8 +80,8 @@ void insert_arm9_payload() {
 		write_le32(payload_pos + (i * 4), instructions[i]);
 	for(int i = 0; i < NUM_COPY_INST; i++)
 		write_le32(payload_copy_pos + (i * 4), instructions_copy_payload[i]);
-	volatile uint8_t* copy_jump_pos = (volatile uint8_t*)0x02004964;
-	volatile uint8_t* jump_pos = (volatile uint8_t*)0x0201C174;
+	volatile uint8_t* copy_jump_pos = (volatile uint8_t*)0x020008F0;
+	volatile uint8_t* jump_pos = (volatile uint8_t*)0x020D7C2C;
 	//volatile uint8_t* jump_pos = (volatile uint8_t*)0x0225E680;
 	volatile uint8_t* cmp_target_pos = (volatile uint8_t*)0x02215BE0;
 	volatile uint32_t cmp_expected = (volatile uint8_t*)0xE59F000D;
@@ -88,6 +91,7 @@ void insert_arm9_payload() {
 	write_le32(payload_copy_pos + 4, jump_pos);
 	//write_le32(payload_pos + (4 * POS_PAYLOAD_LOAD_ADDR), cmp_target_pos);
 	//write_le32(payload_pos + (4 * POS_PAYLOAD_CMP_ADDR), cmp_expected);
+	*/
 
 	/*
 	//ARM9

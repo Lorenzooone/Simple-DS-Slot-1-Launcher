@@ -153,20 +153,18 @@ static void cardDelay (u16 readTimeout) {
 	TIMER_DATA(0) = 0;
 }
 
-static void slot_reset_dsi() {
+static void slot_reset_dsi(bool pass_to_arm9) {
 	// Reset card slot
 	disableSlot1();
-	for (int i = 0; i < 25; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+	for (int i = 0; i < 10; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
 	enableSlot1();
-	for (int i = 0; i < 2; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
-	REG_ROMCTRL = CARD_nRESET;
-	for (int i = 0; i < 15; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
-	// Wait for card to stabilize...
-
-	// Dummy command sent after card reset
-	cardParamCommand (CARD_CMD_DUMMY, 0,
-		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
-		NULL, 0);
+	if(!pass_to_arm9) {
+		while(REG_ROMCTRL & CARD_BUSY);
+		for (int i = 0; i < 2; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+		REG_ROMCTRL = CARD_nRESET;
+		for (int i = 0; i < 15; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+		// Wait for card to stabilize...
+	}
 }
 
 static void slot_reset_shared() {
@@ -192,10 +190,16 @@ void switchToTwlBlowfish(sNDSHeaderExt* ndsHeader) {
 	u8 cmdData[8] __attribute__ ((aligned));
 	GameCode* gameCode;
 
+	// DSi games EXPECT to be inited from ARM7 side, so if this is done, it MUST be here
 	if(isDSiMode())
-		slot_reset_dsi();
+		slot_reset_dsi(false);
 	else
 		slot_reset_shared();
+
+	// Dummy command sent after card reset
+	cardParamCommand (CARD_CMD_DUMMY, 0,
+		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
+		NULL, 0);
 
 	//int iCardDevice = 1;
 
@@ -271,7 +275,7 @@ void switchToTwlBlowfish(sNDSHeaderExt* ndsHeader) {
 	dump_to_data_u32(portFlagsSecRead | CARD_BLK_SIZE(1));
 	dump_to_data_u32(portFlagsSecRead | CARD_BLK_SIZE(4) | CARD_SEC_LARGE);
 
-    int secureAreaOffset = 0;
+	int secureAreaOffset = 0;
 	for (secureBlockNumber = 4; secureBlockNumber < 8; secureBlockNumber++) {
 		createEncryptedCommand (CARD_CMD_SECURE_READ, cmdData, secureBlockNumber);
 		dump_to_data_cmddata(cmdData);
@@ -401,7 +405,7 @@ void switchToRegularBlowfish(sNDSHeaderExt* ndsHeader) {
 }
 */
 
-int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, bool skipcrccheck)
+int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 {
 	u32 portFlagsKey1, portFlagsSecRead;
 	twlBlowfish = false;
@@ -411,9 +415,10 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, bool skipcrc
 	u8 cmdData[8] __attribute__ ((aligned));
 	GameCode* gameCode;
 
+	// This first reset is needed to properly read the header of certain flashcarts!
 	if(do_reset) {
 		if (isDSiMode())
-			slot_reset_dsi();
+			slot_reset_dsi(false);
 		slot_reset_shared();
 	}
 
@@ -422,15 +427,10 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, bool skipcrc
 		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
 		NULL, 0);
 
-	*chipID=cardReadID(CARD_CLK_SLOW);	
-	while (REG_ROMCTRL & CARD_BUSY);
-	//u32 iCheapCard=iCardId&0x80000000;
-
 	// Read the header
 	cardParamCommand (CARD_CMD_HEADER_READ, 0,
 		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
 		(void*)headerData, 0x200/sizeof(u32));
-
 	tonccpy(ndsHeader, headerData, 0x200);
 
 	if ((ndsHeader->unitCode != 0) || (ndsHeader->dsi_flags != 0)) {
@@ -445,9 +445,6 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, bool skipcrc
 		tonccpy(ndsHeader, headerData, 0x1000);
 	}
 
-	if(skipcrccheck)
-		ndsHeader->headerCRC16 = swiCRC16(0xFFFF, (void*)ndsHeader, 0x15E);
-
 	// Check header CRC
 	if(ndsHeader->headerCRC16 != swiCRC16(0xFFFF, (void*)ndsHeader, 0x15E)) {
 		return ERR_HEAD_CRC;
@@ -459,6 +456,23 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, bool skipcrc
 		return ERR_LOGO_CRC;
 	}
 	*/
+	*chipID=cardReadID(CARD_CLK_SLOW);	
+	while (REG_ROMCTRL & CARD_BUSY);
+
+	// NTR games EXPECT to be inited from ARM9 side, so if this is done, it MUST be on the ARM9 side the last time!
+	if(do_reset) {
+		while(arm9_stateFlag != ARM9_READY);
+		if(isDSiMode())
+			slot_reset_dsi(true);
+
+		arm9_stateFlag = ARM9_NTRCARTINIT;
+		while(arm9_stateFlag != ARM9_READY);
+	}
+
+	// Dummy command sent after card reset
+	cardParamCommand (CARD_CMD_DUMMY, 0,
+		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
+		NULL, 0);
 
 	// Initialise blowfish encryption for KEY1 commands and decrypting the secure area
 	gameCode = (GameCode*)ndsHeader->gameCode;
