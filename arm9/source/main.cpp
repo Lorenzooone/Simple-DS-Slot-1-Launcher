@@ -207,6 +207,9 @@ static bool is_read_header_right() {
 }
 
 static void cartridge_read_header_data_total() {
+	cardReadHeader((uint8*)&ndsHeader);
+	if(is_read_header_right())
+		return;
 	cart_reset();
 	cardReadHeader((uint8*)&ndsHeader);
 }
@@ -214,10 +217,12 @@ static void cartridge_read_header_data_total() {
 bool is_card_ready(bool do_read) {
 	if(do_read)
 		cartridge_read_header_data_total();
+	bool is_ready = is_read_header_right();
+	if(!is_ready)
+		return is_ready;
 	// Wait for card to stablize before continuing
-	for (int i = 0; i < 30; i++) { swiWaitForVBlank(); }
-	// Check header CRC
-	return is_read_header_right();
+	for (int i = 0; i < 10; i++) { swiWaitForVBlank(); }
+	return is_ready;
 }
 
 static void update_console_x_pos() {
@@ -262,6 +267,7 @@ static void print_language_to_console(int* language_selected) {
 }
 
 void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_data) {
+	swiWaitForVBlank();
 	consoleClear();
 	int ram_size = 4;
 	if(isDSiMode()) {
@@ -422,6 +428,7 @@ static void input_processing(u32 curr_keys, struct all_options_data_t* all_optio
 	if(curr_keys & KEY_A) {
 		int i = all_options_data->cursor_index;
 		if(settings_options[i] == (&all_options_data->save_to_sd)) {
+			swiWaitForVBlank();
 			PRINT_FUNCTION("Saving...");
 			if(has_sd_access) {
 				FILE* file_write = fopen_mkdir(FILENAME_APP_DATA, "wb");
@@ -471,11 +478,10 @@ int main() {
 		all_options_data.all_saved_data.autoboot = DEFAULT_AUTOBOOT;
 
 	sysSetCardOwner (BUS_OWNER_ARM9);
+	cartridge_read_header_data_total();
+
 	if((!(curr_keys & KEY_B)) && all_options_data.all_saved_data.autoboot)
-		done = is_card_ready(true);
-	else
-		cartridge_read_header_data_total();
-		
+		done = is_card_ready(false);
 
 	if(!done) {
 		videoSetMode(MODE_0_2D);
@@ -495,9 +501,7 @@ int main() {
 		print_data(debugger_type, &all_options_data);
 
 		if(curr_keys & KEY_START) {
-			done = is_card_ready(false);
-			if(!done)
-				done = is_card_ready(true);
+			done = is_card_ready(true);
 		}
 	}
 

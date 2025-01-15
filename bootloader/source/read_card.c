@@ -153,18 +153,16 @@ static void cardDelay (u16 readTimeout) {
 	TIMER_DATA(0) = 0;
 }
 
-static void slot_reset_dsi(bool pass_to_arm9) {
+static void slot_reset_dsi() {
 	// Reset card slot
 	disableSlot1();
 	for (int i = 0; i < 10; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
 	enableSlot1();
-	if(!pass_to_arm9) {
-		while(REG_ROMCTRL & CARD_BUSY);
-		for (int i = 0; i < 2; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
-		REG_ROMCTRL = CARD_nRESET;
-		for (int i = 0; i < 15; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
-		// Wait for card to stabilize...
-	}
+	while(REG_ROMCTRL & CARD_BUSY);
+	for (int i = 0; i < 2; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+	REG_ROMCTRL = CARD_nRESET;
+	for (int i = 0; i < 15; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+	// Wait for card to stabilize...
 }
 
 static void slot_reset_shared() {
@@ -190,9 +188,8 @@ void switchToTwlBlowfish(sNDSHeaderExt* ndsHeader) {
 	u8 cmdData[8] __attribute__ ((aligned));
 	GameCode* gameCode;
 
-	// DSi games EXPECT to be inited from ARM7 side, so if this is done, it MUST be here
 	if(isDSiMode())
-		slot_reset_dsi(false);
+		slot_reset_dsi();
 	else
 		slot_reset_shared();
 
@@ -415,10 +412,9 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 	u8 cmdData[8] __attribute__ ((aligned));
 	GameCode* gameCode;
 
-	// This first reset is needed to properly read the header of certain flashcarts!
 	if(do_reset) {
 		if (isDSiMode())
-			slot_reset_dsi(false);
+			slot_reset_dsi();
 		slot_reset_shared();
 	}
 
@@ -426,6 +422,10 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 	cardParamCommand (CARD_CMD_DUMMY, 0,
 		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
 		NULL, 0);
+
+	// Maybe to be moved... Maybe not...
+	*chipID=cardReadID(CARD_CLK_SLOW);	
+	while (REG_ROMCTRL & CARD_BUSY);
 
 	// Read the header
 	cardParamCommand (CARD_CMD_HEADER_READ, 0,
@@ -456,18 +456,6 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 		return ERR_LOGO_CRC;
 	}
 	*/
-	*chipID=cardReadID(CARD_CLK_SLOW);	
-	while (REG_ROMCTRL & CARD_BUSY);
-
-	// NTR games EXPECT to be inited from ARM9 side, so if this is done, it MUST be on the ARM9 side the last time!
-	if(do_reset) {
-		while(arm9_stateFlag != ARM9_READY);
-		if(isDSiMode())
-			slot_reset_dsi(true);
-
-		arm9_stateFlag = ARM9_NTRCARTINIT;
-		while(arm9_stateFlag != ARM9_READY);
-	}
 
 	// Dummy command sent after card reset
 	cardParamCommand (CARD_CMD_DUMMY, 0,

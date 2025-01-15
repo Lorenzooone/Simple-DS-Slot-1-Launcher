@@ -667,10 +667,13 @@ int arm7_loadBinary (const tDSiHeader* dsiHeaderTemp) {
 	u32 errorCode;
 	
 	// Init card
-	errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, true);
-	if (errorCode) {
+	errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, false);
+	// Try salvaging it...
+	if(errorCode)
+		errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, true);
+	// No way to do this. Return
+	if(errorCode)
 		return errorCode;
-	}
 
 	// Fix Pokemon games needing header data.
 	tonccpy((u32*)NDS_HEADER_POKEMON, (u32*)NDS_HEADER, 0x170);

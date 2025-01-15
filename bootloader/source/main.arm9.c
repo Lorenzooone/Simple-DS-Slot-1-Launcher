@@ -45,7 +45,6 @@
 
 #include "common.h"
 #include "min_font_bin.h"
-#include "read_card_init_ntr.arm9.h"
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // Important things
@@ -382,15 +381,6 @@ void __attribute__((target("arm"))) arm9_main (void) {
 			}
 			arm9_stateFlag = ARM9_READY;
 		}
-		if (arm9_stateFlag == ARM9_NTRCARTINIT) {
-			while(REG_ROMCTRL & CARD_BUSY);
-			for (int i = 0; i < 2; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
-			REG_ROMCTRL = CARD_nRESET;
-			for (int i = 0; i < 15; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
-			// Wait for card to stabilize...
-			executeCardReset9();
-			arm9_stateFlag = ARM9_READY;
-		}
 		arm9_flush_cache();
 	}
 	
@@ -405,6 +395,8 @@ void __attribute__((target("arm"))) arm9_main (void) {
 	//memory_view_to_screen((uint8_t*)0x2380000);
 	//memory_view_to_screen((uint8_t*)0x02EC7040);
 
+	// Ensure the reset bit of REG_ROMCTRL is set...
+	REG_ROMCTRL |= CARD_nRESET;
 	REG_IE = 0;
 	REG_IF = ~0;
 	VoidFn arm9code = (VoidFn)ndsHeader->arm9executeAddress;
