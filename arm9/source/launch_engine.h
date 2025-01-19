@@ -40,7 +40,6 @@ struct launch_engine_data_t {
 	int soundFreq;
 	int runCardEngine;
 	int language;
-	int skipcrccheck;
 } PACKED ALIGNED(4);
 
 void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, bool isDSBrowser);

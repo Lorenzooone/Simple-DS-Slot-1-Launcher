@@ -675,6 +675,8 @@ int arm7_loadBinary (const tDSiHeader* dsiHeaderTemp) {
 	if(errorCode)
 		return errorCode;
 
+	// This currently does absolutely nothing?!
+	/*
 	// Fix Pokemon games needing header data.
 	tonccpy((u32*)NDS_HEADER_POKEMON, (u32*)NDS_HEADER, 0x170);
 
@@ -690,9 +692,10 @@ int arm7_loadBinary (const tDSiHeader* dsiHeaderTemp) {
 		const char gameCodePokemon[] = { 'A', 'D', 'A', 'J' };
 		tonccpy((char*)NDS_HEADER_POKEMON+0xC, gameCodePokemon, 4);
 	}
+	*/
 
-	cardReadDirect(dsiHeaderTemp->ndshdr.arm9romOffset, (u32*)dsiHeaderTemp->ndshdr.arm9destination, dsiHeaderTemp->ndshdr.arm9binarySize);
-	cardReadDirect(dsiHeaderTemp->ndshdr.arm7romOffset, (u32*)dsiHeaderTemp->ndshdr.arm7destination, dsiHeaderTemp->ndshdr.arm7binarySize);
+	cardReadDirect(dsiHeaderTemp->ndshdr.arm9romOffset, (u8*)dsiHeaderTemp->ndshdr.arm9destination, dsiHeaderTemp->ndshdr.arm9binarySize);
+	cardReadDirect(dsiHeaderTemp->ndshdr.arm7romOffset, (u8*)dsiHeaderTemp->ndshdr.arm7destination, dsiHeaderTemp->ndshdr.arm7binarySize);
 
 	//insert_arm9_payload();
 	//insert_arm7_payload();
@@ -720,10 +723,9 @@ Jumps to the ARM7 NDS binary in sync with the display and ARM9
 Written by Darkain, modified by Chishm.
 --------------------------------------------------------------------------*/
 void arm7_startBinary (void) {
-	// arm9_errorOutput (*(u32*)(first), true);
-
 	// Get the ARM9 to boot
 	arm9_stateFlag = ARM9_BOOTBIN;
+	while(arm9_stateFlag != ARM9_READY);
 
 	while (REG_VCOUNT!=191);
 	while (REG_VCOUNT==191);
@@ -736,7 +738,6 @@ void arm7_startBinary (void) {
 	VoidFn arm7code = (VoidFn)ndsHeader->arm7executeAddress;
 	arm7code();
 }
-
 
 /*void fixFlashcardForDSiMode(void) {
 	if ((memcmp(ndsHeader->gameTitle, "PASS", 4) == 0)
@@ -789,7 +790,7 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 	//	const char *ndsPath = "nand:/dsiware.nds";
 	//	tonccpy(deviceListAddr+0x3C0, ndsPath, sizeof(ndsPath));
 
-		//tonccpy((u32*)0x02FFC000, (u32*)DSI_HEADER_SDK5, 0x1000);		// Make a duplicate of DSi header (Already used by dsiHeaderTemp)
+		//tonccpy((u32*)0x02FFC000, (u32*)DSI_HEADER_SDK5, 0x1000);	// Make a duplicate of DSi header (Already used by dsiHeaderTemp)
 		tonccpy((u32*)0x02FFFA80, (u32*)NDS_HEADER_SDK5, 0x160);	// Make a duplicate of DS header
 
 		*(u32*)(0x02FFA680) = 0x02FD4D80;
@@ -817,7 +818,7 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 
 		if (dsiModeConfirmed) {
 			i2cWriteRegister(I2C_PM, I2CREGPM_MMCPWR, 1);		// Have IRQ check for power button press
-			i2cWriteRegister(I2C_PM, I2CREGPM_RESETFLAG, 1);		// SDK 5 --> Bootflag = Warmboot/SkipHealthSafety
+			i2cWriteRegister(I2C_PM, I2CREGPM_RESETFLAG, 1);	// SDK 5 --> Bootflag = Warmboot/SkipHealthSafety
 		}
 	}
 
@@ -852,6 +853,7 @@ void arm7_main (void) {
 
 	// Wait for ARM9 to at least start
 	while (arm9_stateFlag < ARM9_START);
+	arm9_dsimode = __dsimode;
 
 	//debugOutput (ERR_STS_CLR_MEM);
 
@@ -888,12 +890,10 @@ void arm7_main (void) {
 	}
 
 	if (dsiModeConfirmed) {
-		if (dsiHeaderTemp->arm9ibinarySize > 0) {
-			cardReadDirect((u32)dsiHeaderTemp->arm9iromOffset, (u32*)dsiHeaderTemp->arm9idestination, dsiHeaderTemp->arm9ibinarySize);
-		}
-		if (dsiHeaderTemp->arm7ibinarySize > 0) {
-			cardReadDirect((u32)dsiHeaderTemp->arm7iromOffset, (u32*)dsiHeaderTemp->arm7idestination, dsiHeaderTemp->arm7ibinarySize);
-		}
+		if (dsiHeaderTemp->arm9ibinarySize > 0)
+			cardReadDirect((u32)dsiHeaderTemp->arm9iromOffset, (u8*)dsiHeaderTemp->arm9idestination, dsiHeaderTemp->arm9ibinarySize);
+		if (dsiHeaderTemp->arm7ibinarySize > 0)
+			cardReadDirect((u32)dsiHeaderTemp->arm7iromOffset, (u8*)dsiHeaderTemp->arm7idestination, dsiHeaderTemp->arm7ibinarySize);
 
 		uint8_t *target = (uint8_t *)0x02FFC000;
 
@@ -949,6 +949,7 @@ void arm7_main (void) {
 
 	bool isDSBrowser = (memcmp(ndsHeader->gameCode, "UBRP", 4) == 0);
 
+	// While this is fine on DSi and Debugger DS, it's... useless on regular DS?
 	arm9_extendedMemory = (dsiModeConfirmed || isDSBrowser);
 	if (!arm9_extendedMemory) {
 		tonccpy((u32*)0x023FF000, (u32*)(isSdk5(moduleParams) ? 0x02FFF000 : 0x027FF000), 0x1000);
@@ -1049,11 +1050,12 @@ void arm7_main (void) {
 		REG_SCFG_CLK = 0x187;
 	}
 
-	if (!scfgUnlock && !dsiModeConfirmed) {
+	if(!scfgUnlock && !dsiModeConfirmed && isDSiMode()) {
 		// lock SCFG
 		REG_SCFG_EXT &= ~(1UL << 31);
 	}
 
+	while(arm9_stateFlag != ARM9_READY);
 	arm9_stateFlag = ARM9_SETSCFG;
 	while (arm9_stateFlag != ARM9_READY);
 

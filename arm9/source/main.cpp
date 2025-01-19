@@ -27,7 +27,7 @@
 #include "nds_card.h"
 #include "launch_engine.h"
 
-#define SAVED_VERSION 0x1000001
+#define SAVED_VERSION 0x1000000
 
 #define DEFAULT_SCFGUNLOCK_DSI 0
 #define DEFAULT_SDACCESS_DSI 1
@@ -508,7 +508,7 @@ int main() {
 	while (1) {
 		const auto& gameCode = ndsHeader.header.gameCode;
 		setup_defaults(&all_options_data.all_saved_data.launch_engine_data);
-		runLaunchEngine(&all_options_data.all_saved_data.launch_engine_data, (memcmp(gameCode, "UBRP", 4) == 0 || memcmp(gameCode, "AMFE", 4) == 0 || memcmp(gameCode, "ALXX", 4) == 0 || memcmp(ndsHeader.header.gameTitle, "D!S!XTREME", 10) == 0), (memcmp(gameCode, "UBRP", 4) == 0));
+		runLaunchEngine(&all_options_data.all_saved_data.launch_engine_data, (memcmp(gameCode, "UBRP", 4) == 0 || memcmp(gameCode, "AMFE", 4) == 0 || memcmp(gameCode, "ALXX", 4) == 0), (memcmp(gameCode, "UBRP", 4) == 0));
 	}
 	return 0;
 }

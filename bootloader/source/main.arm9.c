@@ -57,15 +57,16 @@
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 tNDSHeader* ndsHeader;
-bool dsiModeConfirmed;
-bool arm9_boostVram;
-bool arm9_scfgUnlock;
-bool arm9_extendedMemory;
-bool arm9_isSdk5;
-bool arm9_runCardEngine;
-volatile int arm9_stateFlag;
-volatile u32 arm9_errorCode;
-volatile bool arm9_errorClearBG;
+volatile bool dsiModeConfirmed = false;
+volatile bool arm9_dsimode = false;
+volatile bool arm9_boostVram = false;
+volatile bool arm9_scfgUnlock = false;
+volatile bool arm9_extendedMemory = false;
+volatile bool arm9_isSdk5 = false;
+volatile bool arm9_runCardEngine = false;
+volatile int arm9_stateFlag = ARM9_BOOT;
+volatile u32 arm9_errorCode = 0;
+volatile bool arm9_errorClearBG = false;
 volatile u32 arm9_BLANK_RAM = 0;
 
 // For debugging
@@ -251,6 +252,8 @@ void memory_view_to_screen(uint8_t* address) {
 	}
 
 	while(REG_KEYINPUT & KEY_A);
+	for(int i = 0; i < (SCREEN_HEIGHT >> 3) * (SCREEN_WIDTH >> 3); i++)
+		vram_target_map[i] = 0;
 }
 
 /*-------------------------------------------------------------------------
@@ -362,27 +365,35 @@ void __attribute__((target("arm"))) arm9_main (void) {
 			}
 		}
 		if (arm9_stateFlag == ARM9_SETSCFG) {
-			if (dsiModeConfirmed) {
-				if (arm9_isSdk5 && ndsHeader->unitCode > 0) {
-					initMBKARM9_dsiMode();
+			if(arm9_dsimode) {
+				if(dsiModeConfirmed) {
+					if(arm9_isSdk5 && ndsHeader->unitCode > 0) {
+						initMBKARM9_dsiMode();
+					}
+					REG_SCFG_EXT = 0x8307F100;
+					REG_SCFG_CLK = 0x87;
+					REG_SCFG_RST = 1;
 				}
-				REG_SCFG_EXT = 0x8307F100;
-				REG_SCFG_CLK = 0x87;
-				REG_SCFG_RST = 1;
-			} else {
-				REG_SCFG_EXT = (arm9_extendedMemory ? 0x8300C000 : 0x83000000);
-				if (arm9_boostVram) {
-					REG_SCFG_EXT |= BIT(13);	// Extended VRAM Access
-				}
-				if (!arm9_scfgUnlock) {
-					// lock SCFG
-					REG_SCFG_EXT &= ~(1UL << 31);
+				else {
+					REG_SCFG_EXT = (arm9_extendedMemory ? 0x8300C000 : 0x83000000);
+					if (arm9_boostVram) {
+						REG_SCFG_EXT |= BIT(13);	// Extended VRAM Access
+					}
+					if (!arm9_scfgUnlock) {
+						// lock SCFG
+						REG_SCFG_EXT &= ~(1UL << 31);
+					}
 				}
 			}
 			arm9_stateFlag = ARM9_READY;
 		}
+		if(arm9_stateFlag == ARM9_PRINT_MEM) {
+			memory_view_to_screen((uint8_t*)0x2003FC0);
+			arm9_stateFlag = ARM9_READY;
+		}
 		arm9_flush_cache();
 	}
+	arm9_stateFlag = ARM9_READY;
 	
 	// wait for vblank then boot
 	while(REG_VCOUNT!=191);

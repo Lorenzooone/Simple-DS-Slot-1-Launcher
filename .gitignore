@@ -26,4 +26,5 @@ cardengine_arm7/build/
 settings.sh
 __pycache__/
 run_reset_save.sh
+make_and_test.sh
 

@@ -153,15 +153,19 @@ static void cardDelay (u16 readTimeout) {
 	TIMER_DATA(0) = 0;
 }
 
+static void wait_vblanks(int num_vblanks) {
+	for (int i = 0; i < num_vblanks; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+}
+
 static void slot_reset_dsi() {
 	// Reset card slot
 	disableSlot1();
-	for (int i = 0; i < 10; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+	wait_vblanks(10);
 	enableSlot1();
 	while(REG_ROMCTRL & CARD_BUSY);
-	for (int i = 0; i < 2; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+	wait_vblanks(2);
 	REG_ROMCTRL = CARD_nRESET;
-	for (int i = 0; i < 15; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+	wait_vblanks(15);
 	// Wait for card to stabilize...
 }
 
@@ -169,7 +173,7 @@ static void slot_reset_shared() {
 	REG_ROMCTRL=0;
 	REG_AUXSPICNT=0;
 	//ioDelay2(167550);
-	for(int i = 0; i < 25; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+	wait_vblanks(25);
 	REG_AUXSPICNT=CARD_CR1_ENABLE|CARD_CR1_IRQ;
 	REG_ROMCTRL=CARD_nRESET|CARD_SEC_SEED;
 	while(REG_ROMCTRL&CARD_BUSY) ;
@@ -322,11 +326,11 @@ void switchToRegularBlowfish(sNDSHeaderExt* ndsHeader) {
 	if(isDSiMode()) { 
 		// Reset card slot
 		disableSlot1();
-		for (int i = 0; i < 25; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+		wait_vblanks(25);
 		enableSlot1();
-		for (int i = 0; i < 2; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+		wait_vblanks(2);
 		REG_ROMCTRL = CARD_nRESET;
-		for (int i = 0; i < 15; i++) { while (REG_VCOUNT!=191); while (REG_VCOUNT==191); }
+		wait_vblanks(15);
 
 		// Dummy command sent after card reset
 		cardParamCommand (CARD_CMD_DUMMY, 0,
@@ -415,25 +419,18 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 	if(do_reset) {
 		if (isDSiMode())
 			slot_reset_dsi();
-		slot_reset_shared();
 	}
 
-	// Dummy command sent after card reset
-	cardParamCommand (CARD_CMD_DUMMY, 0,
-		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
-		NULL, 0);
-
-	// Maybe to be moved... Maybe not...
-	*chipID=cardReadID(CARD_CLK_SLOW);	
-	while (REG_ROMCTRL & CARD_BUSY);
+	slot_reset_shared();
 
 	// Read the header
 	cardParamCommand (CARD_CMD_HEADER_READ, 0,
 		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
 		(void*)headerData, 0x200/sizeof(u32));
+
 	tonccpy(ndsHeader, headerData, 0x200);
 
-	if ((ndsHeader->unitCode != 0) || (ndsHeader->dsi_flags != 0)) {
+	if((ndsHeader->unitCode != 0) || (ndsHeader->dsi_flags != 0)) {
 		// Extended header found
 		cardParamCommand (CARD_CMD_HEADER_READ, 0,
 			CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(4) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
@@ -450,17 +447,16 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 		return ERR_HEAD_CRC;
 	}
 
+	// Maybe to be moved... Maybe not...
+	*chipID=cardReadID(CARD_CLK_SLOW);	
+	while (REG_ROMCTRL & CARD_BUSY);
+
 	/*
 	// Check logo CRC
 	if (ndsHeader->logoCRC16 != 0xCF56) {
 		return ERR_LOGO_CRC;
 	}
 	*/
-
-	// Dummy command sent after card reset
-	cardParamCommand (CARD_CMD_DUMMY, 0,
-		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
-		NULL, 0);
 
 	// Initialise blowfish encryption for KEY1 commands and decrypting the secure area
 	gameCode = (GameCode*)ndsHeader->gameCode;
@@ -504,7 +500,6 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 
 	// 1lllliii jjjkkkkk - 2nd Get ROM Chip ID / Get KEY2 Stream
 	createEncryptedCommand (CARD_CMD_SECURE_CHIPID, cmdData, 0);
-
 	if (normalChip) {
 		cardPolledTransfer(portFlagsKey1, NULL, 0, cmdData);
 		cardDelay(ndsHeader->readTimeout);
@@ -560,11 +555,24 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 		// return normalChip ? ERR_SEC_NORM : ERR_SEC_OTHR;
 	}
 
+	/*
+	uint32_t dummy[0x200 / sizeof(uint32_t)];
+	cardParamCommand (CARD_CMD_DATA_READ, ndsHeader->romSize & (~0x1FF),
+		portFlags | CARD_ACTIVATE | CARD_nRESET | CARD_BLK_SIZE(1),
+		dummy, 0x200 / sizeof(uint32_t));
+	size_t icon_size = 0x0A00;
+	for(int i = 0; i < icon_size / 0x200; i++)
+		cardParamCommand (CARD_CMD_DATA_READ, (ndsHeader->bannerOffset & (~0x1FF)) + (i * 0x200),
+		portFlags | CARD_ACTIVATE | CARD_nRESET | CARD_BLK_SIZE(1),
+		dummy, 0x200 / sizeof(uint32_t));
+	*/
+
 	return ERR_NONE;
 }
 
-void cardReadBlock(u32 src, u32* dest)
+void cardReadBlock(u32 src, u8* dest)
 {
+	uint32_t tmp_dest[0x200 / sizeof(uint32_t)];
 	sNDSHeaderExt* ndsHeader = (sNDSHeaderExt*)headerData;
 
 	if (src >= ndsHeader->romSize) {
@@ -590,12 +598,24 @@ void cardReadBlock(u32 src, u32* dest)
 
 	cardParamCommand (CARD_CMD_DATA_READ, src,
 		portFlags | CARD_ACTIVATE | CARD_nRESET | CARD_BLK_SIZE(1),
-		dest, 0x200 / sizeof(uint32_t));
+		tmp_dest, 0x200 / sizeof(uint32_t));
+	tonccpy(dest, tmp_dest, 0x200);
 }
 
-void cardReadDirect (u32 src, u32* dest, size_t size) {
-	for(int i = 0; i < ((size + 0x200 - 1) / 0x200); i++) {
-		cardReadBlock(src + (i * 0x200), dest + ((0x200 / sizeof(uint32_t)) * i));
-	}
+void cardReadDirect (u32 src, u8* dest, size_t size) {
+	if(size == 0)
+		return;
+
+	// Make it sure it's properly aligned
+	cardReadBlock(src, dest);
+	size_t offset_read_size = ((src + 0x200) & (~0x1FF)) - src;
+	if(size <= offset_read_size)
+		return;
+	size -= offset_read_size;
+	src += offset_read_size;
+	dest += offset_read_size;
+
+	for(int i = 0; i < ((size + 0x200 - 1) / 0x200); i++)
+		cardReadBlock(src + (i * 0x200), dest + (i * 0x200));
 }
 

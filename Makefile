@@ -116,7 +116,7 @@ $(ROM_dsi): arm9 arm7
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -c $@ \
 		-7 arm7/build/arm7.elf -9 arm9/build/arm9.elf \
 		-b $(GAME_ICON) "$(GAME_FULL_TITLE)" \
-		-g SL1L 00 "SLOT1LAUNCH" -z 93FFFB06h -u 00030004 \
+		-g SL1L 00 "SLOT1LAUNCH" -z 93FFFB06h -u 00030004 -a 00000038 \
 		$(NDSTOOL_FAT)
 
 sdimage:

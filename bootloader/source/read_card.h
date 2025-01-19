@@ -33,7 +33,7 @@
 
 int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset);
 
-void cardReadDirect (u32 src, u32* dest, size_t size);
+void cardReadDirect (u32 src, u8* dest, size_t size);
 
 #endif // READ_CARD_H
 

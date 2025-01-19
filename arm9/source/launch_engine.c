@@ -81,6 +81,9 @@ void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBo
 		}
 	}
 
+	// Give the VRAM to the ARM7
+	VRAM_D_CR = VRAM_ENABLE | VRAM_D_ARM7_0x06020000;
+
 	if(pass_min_font) {
 		VRAM_A_CR = VRAM_ENABLE;
 		vramSetBankA(VRAM_A_MAIN_BG);
@@ -88,9 +91,6 @@ void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBo
 			((volatile uint16_t*)0x06000000)[i] = min_font_bin[i * 2] | (min_font_bin[(i * 2) + 1] << 8);
 		}
 	}
-
-	// Give the VRAM to the ARM7
-	VRAM_D_CR = VRAM_ENABLE | VRAM_D_ARM7_0x06020000;
 
 	// Reset into a passme loop
 	REG_EXMEMCNT |= ARM7_OWNS_ROM | ARM7_OWNS_CARD;
