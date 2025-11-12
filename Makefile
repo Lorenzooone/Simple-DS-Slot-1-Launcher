@@ -6,6 +6,8 @@ BLOCKSDS	?= /opt/blocksds/core
 BLOCKSDSEXT	?= /opt/blocksds/external
 BLOCKSDS_VERSION_FILE = $(BLOCKSDS)/libs/version/blocksds_version.make
 
+PYTHON_CMD = python3
+
 #ifeq ("$(wildcard $(BLOCKSDS_VERSION_FILE))","")
 #BLOCKSDS_VERSION_FILE = $(BLOCKSDS)/libs/version/build/blocksds_version.make
 #ifeq ("$(wildcard $(BLOCKSDS_VERSION_FILE))","")
@@ -124,6 +126,8 @@ $(ROM): arm9 arm7
 		-b $(GAME_ICON) "$(GAME_FULL_TITLE)" \
 		-g ${GAMECODE} ${GROUPID} "SLOT1LAUNCH" \
 		$(NDSTOOL_FAT)
+	$(PYTHON_CMD) nds_change_latencies.py $@ 00416657 081808F8 0D7E
+	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@
 
 $(ROM_dsi): arm9 arm7
 	@echo "  NDSTOOL $@"
@@ -132,6 +136,8 @@ $(ROM_dsi): arm9 arm7
 		-b $(GAME_ICON) "$(GAME_FULL_TITLE)" \
 		-g ${GAMECODE} ${GROUPID} "SLOT1LAUNCH" -z 93FFFB06h -u 00030004 -a 00000038 \
 		$(NDSTOOL_FAT)
+	$(PYTHON_CMD) nds_change_latencies.py $@ 00416657 081808F8 0D7E
+	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@
 
 sdimage:
 	@echo "  MKFATIMG $(SDIMAGE) $(SDROOT)"
