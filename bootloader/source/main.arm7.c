@@ -926,9 +926,6 @@ void arm7_main (void) {
 			uint32_t modcryptLengths[2] ;
 			modcryptLengths[0] = ((uint32_t *)(target+0x220))[1] ;
 			modcryptLengths[1] = ((uint32_t *)(target+0x220))[3] ;
-
-			uint32_t rk[4];
-			tonccpy(rk, key, 16) ;
 			
 			dsi_context ctx;
 			dsi_set_key(&ctx, key);

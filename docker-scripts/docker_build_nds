@@ -6,7 +6,7 @@ make clean
 make
 
 mkdir -p /home/builder/slot1launch/out
-ls
+
 cp slot1launch.nds /home/builder/slot1launch/out/slot1launch.nds
 cp slot1launch.dsi /home/builder/slot1launch/out/slot1launch.dsi
 

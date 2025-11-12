@@ -4,11 +4,24 @@
 
 BLOCKSDS	?= /opt/blocksds/core
 BLOCKSDSEXT	?= /opt/blocksds/external
+BLOCKSDS_VERSION_FILE = $(BLOCKSDS)/libs/version/blocksds_version.make
+
+#ifeq ("$(wildcard $(BLOCKSDS_VERSION_FILE))","")
+#BLOCKSDS_VERSION_FILE = $(BLOCKSDS)/libs/version/build/blocksds_version.make
+#ifeq ("$(wildcard $(BLOCKSDS_VERSION_FILE))","")
+#$(error BlocksDS version too old. Please update.)
+#endif
+#endif
+
+#include $(BLOCKSDS_VERSION_FILE)
 
 # User config
 # ===========
 
 NAME		:= slot1launch
+
+GAMECODE	:= SL1L
+GROUPID		:= 00
 
 GAME_TITLE	:= Slot-1 Launcher
 GAME_SUBTITLE	:= Launch cartridge in Slot 1
@@ -109,6 +122,7 @@ $(ROM): arm9 arm7
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -c $@ \
 		-7 arm7/build/arm7.elf -9 arm9/build/arm9.elf \
 		-b $(GAME_ICON) "$(GAME_FULL_TITLE)" \
+		-g ${GAMECODE} ${GROUPID} "SLOT1LAUNCH" \
 		$(NDSTOOL_FAT)
 
 $(ROM_dsi): arm9 arm7
@@ -116,7 +130,7 @@ $(ROM_dsi): arm9 arm7
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -c $@ \
 		-7 arm7/build/arm7.elf -9 arm9/build/arm9.elf \
 		-b $(GAME_ICON) "$(GAME_FULL_TITLE)" \
-		-g SL1L 00 "SLOT1LAUNCH" -z 93FFFB06h -u 00030004 -a 00000038 \
+		-g ${GAMECODE} ${GROUPID} "SLOT1LAUNCH" -z 93FFFB06h -u 00030004 -a 00000038 \
 		$(NDSTOOL_FAT)
 
 sdimage:

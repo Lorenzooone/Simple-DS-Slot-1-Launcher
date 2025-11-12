@@ -23,8 +23,16 @@ cardengine_arm7/build/
 *.zip
 *.o
 *.py
+*.json
+*.dll
+*.cia
+*.exe
+*.pdb
+convert_dsi.sh
+convert_3ds.sh
 settings.sh
 __pycache__/
 run_reset_save.sh
 make_and_test.sh
+convert_dsi.sh
 
