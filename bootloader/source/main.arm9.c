@@ -78,6 +78,7 @@ External functions
 --------------------------------------------------------------------------*/
 extern void arm9_clearCache (void);
 extern void arm9_flush_cache(void);
+extern void arm9_write_to_scfg_clk(uint16_t);
 
 void initMBKARM9() {
 	// default dsiware settings
@@ -374,9 +375,9 @@ void __attribute__((target("arm"))) arm9_main (void) {
 					REG_SCFG_EXT = 0x8307F100;
 					// bit 7 is read only in reality...
 					if(arm9_twlClock)
-						REG_SCFG_CLK = 0x87;
+						arm9_write_to_scfg_clk(0x87);
 					else
-						REG_SCFG_CLK = 0x86;
+						arm9_write_to_scfg_clk(0x86);
 					REG_SCFG_RST = 1;
 				}
 				else {
@@ -385,9 +386,9 @@ void __attribute__((target("arm"))) arm9_main (void) {
 						REG_SCFG_EXT |= BIT(13);	// Extended VRAM Access
 					}
 					if(arm9_twlClock)
-						REG_SCFG_CLK = 0x01;
+						arm9_write_to_scfg_clk(0x01);
 					else
-						REG_SCFG_CLK = 0x00;
+						arm9_write_to_scfg_clk(0x00);
 					if (!arm9_scfgUnlock) {
 						// lock SCFG
 						REG_SCFG_EXT &= ~(1UL << 31);

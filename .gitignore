@@ -30,6 +30,7 @@ cardengine_arm7/build/
 *.pdb
 convert_dsi.sh
 convert_3ds.sh
+cp_tad_to_emu_sdfiles.sh
 convert_cartridge.sh
 settings.sh
 __pycache__/
