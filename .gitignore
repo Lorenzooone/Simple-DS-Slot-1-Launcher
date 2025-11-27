@@ -30,6 +30,7 @@ cardengine_arm7/build/
 *.pdb
 convert_dsi.sh
 convert_3ds.sh
+convert_cartridge.sh
 settings.sh
 __pycache__/
 run_reset_save.sh

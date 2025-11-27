@@ -60,6 +60,7 @@ tNDSHeader* ndsHeader;
 volatile bool dsiModeConfirmed = false;
 volatile bool arm9_dsimode = false;
 volatile bool arm9_boostVram = false;
+volatile bool arm9_twlClock = false;
 volatile bool arm9_scfgUnlock = false;
 volatile bool arm9_extendedMemory = false;
 volatile bool arm9_isSdk5 = false;
@@ -371,7 +372,11 @@ void __attribute__((target("arm"))) arm9_main (void) {
 						initMBKARM9_dsiMode();
 					}
 					REG_SCFG_EXT = 0x8307F100;
-					REG_SCFG_CLK = 0x87;
+					// bit 7 is read only in reality...
+					if(arm9_twlClock)
+						REG_SCFG_CLK = 0x87;
+					else
+						REG_SCFG_CLK = 0x86;
 					REG_SCFG_RST = 1;
 				}
 				else {
@@ -379,6 +384,10 @@ void __attribute__((target("arm"))) arm9_main (void) {
 					if (arm9_boostVram) {
 						REG_SCFG_EXT |= BIT(13);	// Extended VRAM Access
 					}
+					if(arm9_twlClock)
+						REG_SCFG_CLK = 0x01;
+					else
+						REG_SCFG_CLK = 0x00;
 					if (!arm9_scfgUnlock) {
 						// lock SCFG
 						REG_SCFG_EXT &= ~(1UL << 31);

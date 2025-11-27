@@ -60,6 +60,7 @@ extern tNDSHeader* ndsHeader;
 extern volatile bool dsiModeConfirmed;
 extern volatile bool arm9_dsimode;
 extern volatile bool arm9_boostVram;
+extern volatile bool arm9_twlClock;
 extern volatile bool arm9_scfgUnlock;
 extern volatile bool arm9_extendedMemory;
 extern volatile bool arm9_isSdk5;
