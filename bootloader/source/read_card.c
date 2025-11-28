@@ -595,7 +595,7 @@ void cardReadBlock(u32 src, u8* dest)
 		// Read data from secure area
 		tonccpy (dest, (u8*)secureArea + src - CARD_SECURE_AREA_OFFSET, 0x200);
 		return;
-	} else if ((ndsHeader->unitCode != 0) && (src >= ndsHeader->arm9iromOffset) && (src < ndsHeader->arm9iromOffset+CARD_SECURE_AREA_SIZE)) {
+	} else if ((ndsHeader->unitCode != 0) && (ndsHeader->arm9iromOffset != 0) && (ndsHeader->arm9ibinarySize != 0) &&  (src >= ndsHeader->arm9iromOffset) && (src < ndsHeader->arm9iromOffset+CARD_SECURE_AREA_SIZE) && (src < ndsHeader->arm9iromOffset + ndsHeader->arm9ibinarySize)) {
 		// Read data from secure area
 		tonccpy (dest, (u8*)secureArea + src - ndsHeader->arm9iromOffset, 0x200);
 		return;
