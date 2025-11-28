@@ -68,15 +68,18 @@ ARM7DIR		:= arm7
 # Build artfacts
 # --------------
 
-ROM		:= $(NAME).nds
-ROM_dsi		:= $(NAME).dsi
+ROM					:= $(NAME).nds
+ROM_dsi				:= $(NAME).dsi
+ROM_dsi_cartridge	:= $(NAME)_cartridge.dsi
 
 # Targets
 # -------
 
-.PHONY: all clean arm9 arm7 cardengine_arm7 bootloader bootloaderAlt dldipatch sdimage
+.PHONY: all clean cartridge arm9 arm7 cardengine_arm7 bootloader bootloaderAlt dldipatch sdimage
 
 all: $(ROM) $(ROM_dsi)
+
+cartridge: $(ROM_dsi_cartridge)
 
 clean:
 	@echo "  CLEAN"
@@ -85,7 +88,7 @@ clean:
 	$(V)$(MAKE) -f Makefile.arm7 -C bootloader clean --no-print-directory
 	$(V)$(MAKE) -C bootloaderAlt clean --no-print-directory
 	$(V)$(MAKE) -C cardengine_arm7 clean --no-print-directory
-	$(V)$(RM) $(ROM) $(ROM_dsi) build $(SDIMAGE)
+	$(V)$(RM) $(ROM) $(ROM_dsi) $(ROM_dsi_cartridge) build $(SDIMAGE)
 
 arm9: cardengine_arm7 bootloader bootloaderAlt
 	$(V)+$(MAKE) -C arm9 --no-print-directory
@@ -110,6 +113,8 @@ NDSTOOL_ARGS	:= -d $(NITROFSDIR)
 $(ROM): $(NITROFSDIR)
 # Make the DSi ROM depend on the filesystem only if it is needed
 $(ROM_dsi): $(NITROFSDIR)
+# Make the DSi cartridge ROM depend on the filesystem only if it is needed
+$(ROM_dsi_cartridge): $(NITROFSDIR)
 endif
 
 # Combine the title strings
@@ -137,6 +142,11 @@ $(ROM_dsi): arm9 arm7
 		-g ${GAMECODE} ${GROUPID} "SLOT1LAUNCH" -z 93FFFB06h -u 00030004 -a 00000038 \
 		$(NDSTOOL_FAT)
 	$(PYTHON_CMD) nds_change_latencies.py $@ 00416657 081808F8 0D7E
+	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@
+
+$(ROM_dsi_cartridge): $(ROM_dsi)
+	cp $(ROM_dsi) $@
+	$(PYTHON_CMD) nds_change_filetype.py $@ 00030000
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@
 
 sdimage:
