@@ -92,6 +92,7 @@ static const u32 cheatDataEndSignature[2] = {0xCF000000, 0x00000000};
 #define MODULE_PARAMS_SIGNATURE_SIZE 2
 // Module params - Add start to avoid being mistaken for using old SDK version
 static const u32 moduleParamsPersonal[MODULE_PARAMS_PERSONAL_SIZE] = {0x0503757C, 0xDEC00621, 0x2106C0DE};
+static module_params_t emulatedModuleParams; 
 
 static uintptr_t base_dsi_info_addr;
 
@@ -116,8 +117,15 @@ u32* findModuleParamsOffset(const tNDSHeader* ndsHeader) {
 		);
 
 	// Return NULL if nothing is found
-	if(moduleParamsOffset == NULL)
+	if(moduleParamsOffset == NULL) {
+		if (memcmp(ndsHeader->gameCode, "AS2E", 4) == 0) // Spider-Man 2 (USA)
+		{
+			emulatedModuleParams.sdk_version = LAST_NON_SDK5_VERSION;
+			return (u32*)&emulatedModuleParams;
+		}
+
 		return NULL;
+	}
 
 	uintptr_t subtract_value = sizeof(module_params_t) - (sizeof(u32) * MODULE_PARAMS_SIGNATURE_SIZE);
 	uintptr_t base_ptr = (uintptr_t)moduleParamsOffset;
