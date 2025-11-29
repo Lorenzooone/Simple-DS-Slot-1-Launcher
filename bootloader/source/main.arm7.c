@@ -215,9 +215,9 @@ static void my_readUserSettings(tNDSHeader* ndsHeader) {
 		}
 	}
 
-	PERSONAL_DATA* personalData = (PERSONAL_DATA*)((u32)__NDSHeader - (u32)ndsHeader + (u32)PersonalData); //(u8*)((u32)ndsHeader - 0x180)
+	PERSONAL_DATA* personalData = (PERSONAL_DATA*)((u32)ndsHeader - ((u32)__NDSHeader - (u32)PersonalData)); //(u8*)((u32)ndsHeader - 0x180)
 
-	tonccpy(PersonalData, currentSettings, sizeof(PERSONAL_DATA));
+	tonccpy(personalData, currentSettings, sizeof(PERSONAL_DATA));
 
 	if (useTwlCfg && (language == 0xFF || language == -1)) {
 		language = twlCfgLang;
@@ -970,6 +970,8 @@ void arm7_main (void) {
 
 	ndsHeader = loadHeader(dsiHeaderTemp);
 
+	my_readUserSettings(ndsHeader); // Header has to be loaded first
+
 	bool isDSBrowser = (memcmp(ndsHeader->gameCode, "UBRP", 4) == 0);
 
 	// While this is fine on DSi and Debugger DS, it's... useless on regular DS?
@@ -977,8 +979,6 @@ void arm7_main (void) {
 	if (!arm9_extendedMemory) {
 		tonccpy((u32*)0x023FF000, (u32*)base_dsi_info_addr, 0x1000);
 	}
-
-	my_readUserSettings(ndsHeader); // Header has to be loaded first
 
 	if (isDSiMode()) {
 		if (dsiModeConfirmed) {
