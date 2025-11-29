@@ -27,6 +27,16 @@
 #include "nds_card.h"
 #include "launch_engine.h"
 
+#ifndef GAMETITLE
+#define GAMETITLE "SLOT1LAUNCH"
+#endif
+#ifndef GAMEGROUPID
+#define GAMEGROUPID "00"
+#endif
+#ifndef GAMECODE
+#define GAMECODE "SL1L"
+#endif
+
 #define SAVED_VERSION 0x1000000
 
 #define DEFAULT_SCFGUNLOCK_DSI 0
@@ -447,6 +457,18 @@ static void input_processing(u32 curr_keys, struct all_options_data_t* all_optio
 	}
 }
 
+static bool are_same_strings_with_trailing_0s(const char* base, const char* cmp, size_t max_size) {
+	size_t base_len = strnlen(base, max_size);
+	if(base_len != strnlen(cmp, max_size))
+		return false;
+	if(memcmp(base, cmp, base_len) != 0)
+		return false;
+	for(size_t i = base_len; i < max_size; i++)
+		if(base[i] != '\0')
+			return false;
+	return true;
+}
+
 int main() {
 	fifoSendValue32(FIFO_PM, PM_REQ_SLEEP_DISABLE);
 
@@ -458,7 +480,7 @@ int main() {
 	do {
 		swiWaitForVBlank();
 		scanKeys();
-		curr_keys = keysCurrent();
+		curr_keys = keysHeld();
 	} while((curr_keys & (KEY_DEBUG | KEY_SELECT)) && (!(curr_keys & KEY_B)));
 	bool done = false;
 	bool has_sd_access = false;
@@ -482,6 +504,14 @@ int main() {
 
 	if((!(curr_keys & KEY_B)) && all_options_data.all_saved_data.autoboot)
 		done = is_card_ready(false);
+
+	if(done) {
+		const auto& gameCode = ndsHeader.header.gameCode;
+		const auto& gameTitle = ndsHeader.header.gameTitle;
+		const auto& makerCode = ndsHeader.header.makercode;
+		if(are_same_strings_with_trailing_0s(gameCode, GAMECODE, 4) && are_same_strings_with_trailing_0s(makerCode, GAMEGROUPID, 2) && are_same_strings_with_trailing_0s(gameTitle, GAMETITLE, 12))
+			done = false;
+	} 
 
 	if(!done) {
 		videoSetMode(MODE_0_2D);

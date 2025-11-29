@@ -22,13 +22,14 @@ PYTHON_CMD = python3
 
 NAME		:= slot1launch
 
-GAMECODE	:= SL1L
-GROUPID		:= 00
+export GAMECODE			:= SL1L
+export GAMEGROUPID		:= 00
+export GAMEDATATITLE	:= SLOT1LAUNCH
 
-GAME_TITLE	:= Slot-1 Launcher
+GAME_TITLE		:= Slot-1 Launcher
 GAME_SUBTITLE	:= Launch cartridge in Slot 1
-GAME_AUTHOR	:= Lorenzooone
-GAME_ICON	:= icon.png
+GAME_AUTHOR		:= Lorenzooone
+GAME_ICON		:= icon.png
 
 # DLDI and internal SD slot of DSi
 # --------------------------------
@@ -48,7 +49,7 @@ NITROFSDIR	:=
 # -----
 
 MAKE		:= make
-RM		:= rm -rf
+RM			:= rm -rf
 
 # Verbose flag
 # ------------
@@ -129,7 +130,7 @@ $(ROM): arm9 arm7
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -c $@ \
 		-7 arm7/build/arm7.elf -9 arm9/build/arm9.elf \
 		-b $(GAME_ICON) "$(GAME_FULL_TITLE)" \
-		-g ${GAMECODE} ${GROUPID} "SLOT1LAUNCH" \
+		-g ${GAMECODE} ${GAMEGROUPID} "${GAMEDATATITLE}" \
 		$(NDSTOOL_FAT)
 	$(PYTHON_CMD) nds_change_latencies.py $@ 00416657 081808F8 0D7E
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@
@@ -139,7 +140,7 @@ $(ROM_dsi): arm9 arm7
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -c $@ \
 		-7 arm7/build/arm7.elf -9 arm9/build/arm9.elf \
 		-b $(GAME_ICON) "$(GAME_FULL_TITLE)" \
-		-g ${GAMECODE} ${GROUPID} "SLOT1LAUNCH" -z 93FFFB06h -u 00030004 -a 00000038 \
+		-g ${GAMECODE} ${GAMEGROUPID} "${GAMEDATATITLE}" -z 93FFFB06h -u 00030004 -a 00000038 \
 		$(NDSTOOL_FAT)
 	$(PYTHON_CMD) nds_change_latencies.py $@ 00416657 081808F8 0D7E
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@

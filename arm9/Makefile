@@ -13,6 +13,8 @@ ARM_NONE_EABI_PATH	?= $(WONDERFUL_TOOLCHAIN)/toolchain/gcc-arm-none-eabi/bin/
 
 DEFINES		:=
 
+SRCDEFINES	:= -D GAMETITLE="\"${GAMEDATATITLE}\"" -D GAMEGROUPID="\"${GAMEGROUPID}\"" -D GAMECODE="\"${GAMECODE}\""
+
 # Libraries
 # ---------
 
@@ -34,12 +36,12 @@ SOUNDBANKDIR	:= $(BUILDDIR)/maxmod
 # -----
 
 PREFIX		:= $(ARM_NONE_EABI_PATH)arm-none-eabi-
-CC		:= $(PREFIX)gcc
-CXX		:= $(PREFIX)g++
-LD		:= $(PREFIX)gcc
+CC			:= $(PREFIX)gcc
+CXX			:= $(PREFIX)g++
+LD			:= $(PREFIX)gcc
 OBJDUMP		:= $(PREFIX)objdump
 MKDIR		:= mkdir
-RM		:= rm -rf
+RM			:= rm -rf
 
 # Verbose flag
 # ------------
@@ -101,15 +103,15 @@ INCLUDEFLAGS	:= $(foreach path,$(INCLUDEDIRS),-I$(path)) \
 
 LIBDIRSFLAGS	:= $(foreach path,$(LIBDIRS),-L$(path)/lib)
 
-ASFLAGS		+= -x assembler-with-cpp $(DEFINES) $(INCLUDEFLAGS) \
+ASFLAGS		+= -x assembler-with-cpp $(DEFINES) $(SRCDEFINES) $(INCLUDEFLAGS) \
 		   $(ARCH) -ffunction-sections -fdata-sections \
 		   -specs=$(SPECS)
 
-CFLAGS		+= -std=gnu17 $(WARNFLAGS) $(DEFINES) $(INCLUDEFLAGS) \
+CFLAGS		+= -std=gnu17 $(WARNFLAGS) $(DEFINES) $(SRCDEFINES) $(INCLUDEFLAGS) \
 		   $(ARCH) -O2 -ffunction-sections -fdata-sections \
 		   -specs=$(SPECS)
 
-CXXFLAGS	+= -std=gnu++17 $(WARNFLAGS) $(DEFINES) $(INCLUDEFLAGS) \
+CXXFLAGS	+= -std=gnu++17 $(WARNFLAGS) $(DEFINES) $(SRCDEFINES) $(INCLUDEFLAGS) \
 		   $(ARCH) -O2 -ffunction-sections -fdata-sections \
 		   -fno-exceptions -fno-rtti \
 		   -specs=$(SPECS)

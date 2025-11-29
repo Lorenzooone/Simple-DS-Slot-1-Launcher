@@ -34,7 +34,7 @@ int main(void) {
 	irqInit();
 
 	// Start the RTC tracking IRQ
-	initClockIRQ();
+	//initClockIRQ();
 	fifoInit();
 
 	SetYtrigger(80);
