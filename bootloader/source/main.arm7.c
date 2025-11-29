@@ -88,8 +88,12 @@ void arm7_clearmem (void* loc, size_t len);
 
 static const u32 cheatDataEndSignature[2] = {0xCF000000, 0x00000000};
 
-// Module params
-static const u32 moduleParamsSignature[2] = {0xDEC00621, 0x2106C0DE};
+#define MODULE_PARAMS_PERSONAL_SIZE 3
+#define MODULE_PARAMS_SIGNATURE_SIZE 2
+// Module params - Add start to avoid being mistaken for using old SDK version
+static const u32 moduleParamsPersonal[MODULE_PARAMS_PERSONAL_SIZE] = {0x0503757C, 0xDEC00621, 0x2106C0DE};
+
+static uintptr_t base_dsi_info_addr;
 
 static u32 chipID;
 
@@ -108,9 +112,21 @@ u32* findModuleParamsOffset(const tNDSHeader* ndsHeader) {
 
 	u32* moduleParamsOffset = findOffset(
 			(u32*)ndsHeader->arm9destination, ndsHeader->arm9binarySize,
-			moduleParamsSignature, 2
+			moduleParamsPersonal + (MODULE_PARAMS_PERSONAL_SIZE - MODULE_PARAMS_SIGNATURE_SIZE), MODULE_PARAMS_SIGNATURE_SIZE 
 		);
-	return moduleParamsOffset;
+
+	// Return NULL if nothing is found
+	if(moduleParamsOffset == NULL)
+		return NULL;
+
+	uintptr_t subtract_value = sizeof(module_params_t) - (sizeof(u32) * MODULE_PARAMS_SIGNATURE_SIZE);
+	uintptr_t base_ptr = (uintptr_t)moduleParamsOffset;
+
+	// This would be a really weird case. Return NULL
+	if(base_ptr < subtract_value)
+		return NULL;
+
+	return (u32*)(base_ptr - subtract_value);
 }
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -123,6 +139,9 @@ u32* findModuleParamsOffset(const tNDSHeader* ndsHeader) {
 #define DSI_HEADER_SDK5    0x02FFE000 // __DSiHeader
 
 #define ENGINE_LOCATION_ARM7  	0x037C0000
+
+#define DSI_INFO_BASE_ADDR		0x027FF000
+#define DSI_INFO_BASE_ADDR_SDK5	0x02FFF000
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // Used for debugging purposes
@@ -713,6 +732,8 @@ int arm7_loadBinary (const tDSiHeader* dsiHeaderTemp) {
 static tNDSHeader* loadHeader(tDSiHeader* dsiHeaderTemp) {
 	tNDSHeader* ndsHeader = (tNDSHeader*)(isSdk5(moduleParams) ? NDS_HEADER_SDK5 : NDS_HEADER);
 
+	base_dsi_info_addr = isSdk5(moduleParams) ? DSI_INFO_BASE_ADDR_SDK5 : DSI_INFO_BASE_ADDR;
+
 	*ndsHeader = dsiHeaderTemp->ndshdr;
 	if (dsiModeConfirmed) {
 		tDSiHeader* dsiHeader = (tDSiHeader*)(isSdk5(moduleParams) ? DSI_HEADER_SDK5 : DSI_HEADER); // __DSiHeader
@@ -789,11 +810,11 @@ void fixDSBrowser(void) {
 
 static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 	if (ROMsupportsDsiMode(ndsHeader)) {
-	//	u8* deviceListAddr = (u8*)((u8*)0x02FFE1D4);
-	//	tonccpy(deviceListAddr, deviceList_bin, deviceList_bin_len);
+		//	u8* deviceListAddr = (u8*)((u8*)0x02FFE1D4);
+		//	tonccpy(deviceListAddr, deviceList_bin, deviceList_bin_len);
 
-	//	const char *ndsPath = "nand:/dsiware.nds";
-	//	tonccpy(deviceListAddr+0x3C0, ndsPath, sizeof(ndsPath));
+		//	const char *ndsPath = "nand:/dsiware.nds";
+		//	tonccpy(deviceListAddr+0x3C0, ndsPath, sizeof(ndsPath));
 
 		//tonccpy((u32*)0x02FFC000, (u32*)DSI_HEADER_SDK5, 0x1000);	// Make a duplicate of DSi header (Already used by dsiHeaderTemp)
 		tonccpy((u32*)0x02FFFA80, (u32*)NDS_HEADER_SDK5, 0x160);	// Make a duplicate of DS header
@@ -829,22 +850,22 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 
     // Set memory values expected by loaded NDS
     // from NitroHax, thanks to Chism
-	*((u32*)(isSdk5(moduleParams) ? 0x02fff800 : 0x027ff800)) = chipID;					// CurrentCardID
-	*((u32*)(isSdk5(moduleParams) ? 0x02fff804 : 0x027ff804)) = chipID;					// Command10CardID
-	*((u16*)(isSdk5(moduleParams) ? 0x02fff808 : 0x027ff808)) = ndsHeader->headerCRC16;	// Header Checksum, CRC-16 of [000h-15Dh]
-	*((u16*)(isSdk5(moduleParams) ? 0x02fff80a : 0x027ff80a)) = ndsHeader->secureCRC16;	// Secure Area Checksum, CRC-16 of [ [20h]..7FFFh]
+	*((u32*)(base_dsi_info_addr + 0x800)) = chipID;					// CurrentCardID
+	*((u32*)(base_dsi_info_addr + 0x804)) = chipID;					// Command10CardID
+	*((u16*)(base_dsi_info_addr + 0x808)) = ndsHeader->headerCRC16;	// Header Checksum, CRC-16 of [000h-15Dh]
+	*((u16*)(base_dsi_info_addr + 0x80a)) = ndsHeader->secureCRC16;	// Secure Area Checksum, CRC-16 of [ [20h]..7FFFh]
 
-	*((u16*)(isSdk5(moduleParams) ? 0x02fff850 : 0x027ff850)) = 0x5835;
+	*((u16*)(base_dsi_info_addr + 0x850)) = 0x5835;
 
 	// Copies of above
-	*((u32*)(isSdk5(moduleParams) ? 0x02fffc00 : 0x027ffc00)) = chipID;					// CurrentCardID
-	*((u32*)(isSdk5(moduleParams) ? 0x02fffc04 : 0x027ffc04)) = chipID;					// Command10CardID
-	*((u16*)(isSdk5(moduleParams) ? 0x02fffc08 : 0x027ffc08)) = ndsHeader->headerCRC16;	// Header Checksum, CRC-16 of [000h-15Dh]
-	*((u16*)(isSdk5(moduleParams) ? 0x02fffc0a : 0x027ffc0a)) = ndsHeader->secureCRC16;	// Secure Area Checksum, CRC-16 of [ [20h]..7FFFh]
+	*((u32*)(base_dsi_info_addr + 0xc00)) = chipID;					// CurrentCardID
+	*((u32*)(base_dsi_info_addr + 0xc04)) = chipID;					// Command10CardID
+	*((u16*)(base_dsi_info_addr + 0xc08)) = ndsHeader->headerCRC16;	// Header Checksum, CRC-16 of [000h-15Dh]
+	*((u16*)(base_dsi_info_addr + 0xc0a)) = ndsHeader->secureCRC16;	// Secure Area Checksum, CRC-16 of [ [20h]..7FFFh]
 
-	*((u16*)(isSdk5(moduleParams) ? 0x02fffc10 : 0x027ffc10)) = 0x5835;
+	*((u16*)(base_dsi_info_addr + 0xc10)) = 0x5835;
 
-	*((u16*)(isSdk5(moduleParams) ? 0x02fffc40 : 0x027ffc40)) = 0x1;						// Boot Indicator (Booted from card for SDK5) -- EXTREMELY IMPORTANT!!! Thanks to cReDiAr
+	*((u16*)(base_dsi_info_addr + 0xc40)) = 0x1;						// Boot Indicator (Booted from card for SDK5) -- EXTREMELY IMPORTANT!!! Thanks to cReDiAr
 }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -954,7 +975,7 @@ void arm7_main (void) {
 	// While this is fine on DSi and Debugger DS, it's... useless on regular DS?
 	arm9_extendedMemory = (dsiModeConfirmed || isDSBrowser);
 	if (!arm9_extendedMemory) {
-		tonccpy((u32*)0x023FF000, (u32*)(isSdk5(moduleParams) ? 0x02FFF000 : 0x027FF000), 0x1000);
+		tonccpy((u32*)0x023FF000, (u32*)base_dsi_info_addr, 0x1000);
 	}
 
 	my_readUserSettings(ndsHeader); // Header has to be loaded first
