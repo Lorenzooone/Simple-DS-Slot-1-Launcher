@@ -32,6 +32,9 @@ typedef union
 	u32 key;
 } GameCode;
 
+#define TWL_BLOWFISH_TABLE_SIZE 0x3000
+#define SINGLE_ROM_REGION_SIZE 0x80000
+
 static bool twlBlowfish = false;
 
 static bool normalChip = false;	// As defined by GBAtek, normal chip secure area is accessed in blocks of 0x200, other chip in blocks of 0x1000
@@ -595,10 +598,15 @@ void cardReadBlock(u32 src, u8* dest)
 		// Read data from secure area
 		tonccpy (dest, (u8*)secureArea + src - CARD_SECURE_AREA_OFFSET, 0x200);
 		return;
-	} else if ((ndsHeader->unitCode != 0) && (ndsHeader->arm9iromOffset != 0) && (ndsHeader->arm9ibinarySize != 0) &&  (src >= ndsHeader->arm9iromOffset) && (src < ndsHeader->arm9iromOffset+CARD_SECURE_AREA_SIZE) && (src < ndsHeader->arm9iromOffset + ndsHeader->arm9ibinarySize)) {
-		// Read data from secure area
-		tonccpy (dest, (u8*)secureArea + src - ndsHeader->arm9iromOffset, 0x200);
-		return;
+	} else if (ndsHeader->unitCode != 0) {
+		size_t twl_rom_region_start = 0;
+		if(ndsHeader->twl_rom_region_start != 0)
+			twl_rom_region_start = (ndsHeader->twl_rom_region_start * SINGLE_ROM_REGION_SIZE) + TWL_BLOWFISH_TABLE_SIZE;
+		if((twl_rom_region_start != 0) && (src >= twl_rom_region_start) && (src < twl_rom_region_start + CARD_SECURE_AREA_SIZE)) {
+			// Read data from secure area
+			tonccpy (dest, (u8*)secureArea + src - twl_rom_region_start, 0x200);
+			return;
+		}
 	}
 
 	cardParamCommand (CARD_CMD_DATA_READ, src,
