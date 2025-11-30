@@ -8,14 +8,14 @@ BLOCKSDS_VERSION_FILE = $(BLOCKSDS)/libs/version/blocksds_version.make
 
 PYTHON_CMD = python3
 
-#ifeq ("$(wildcard $(BLOCKSDS_VERSION_FILE))","")
-#BLOCKSDS_VERSION_FILE = $(BLOCKSDS)/libs/version/build/blocksds_version.make
-#ifeq ("$(wildcard $(BLOCKSDS_VERSION_FILE))","")
-#$(error BlocksDS version too old. Please update.)
-#endif
-#endif
+ifeq ("$(wildcard $(BLOCKSDS_VERSION_FILE))","")
+BLOCKSDS_VERSION_FILE = $(BLOCKSDS)/libs/version/build/blocksds_version.make
+ifeq ("$(wildcard $(BLOCKSDS_VERSION_FILE))","")
+$(error BlocksDS version too old. Please update.)
+endif
+endif
 
-#include $(BLOCKSDS_VERSION_FILE)
+include $(BLOCKSDS_VERSION_FILE)
 
 # User config
 # ===========

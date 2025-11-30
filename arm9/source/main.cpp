@@ -22,7 +22,7 @@
 #include <sys/stat.h>
 
 #include <stdio.h>
-#include <string.h>
+#include <string>
 
 #include "nds_card.h"
 #include "launch_engine.h"
@@ -37,9 +37,9 @@
 #define GAMECODE "SL1L"
 #endif
 
-#define SAVED_VERSION 0x1000000
+#define SAVED_VERSION 0x01000000
 
-#define DEFAULT_SCFGUNLOCK_DSI 0
+#define DEFAULT_SCFGUNLOCK_DSI 1
 #define DEFAULT_SDACCESS_DSI 1
 #define DEFAULT_TWLMODE_DSI 1
 #define DEFAULT_TWLCLK_DSI 1
@@ -62,6 +62,7 @@
 #define DEFAULT_VALUE_GENERIC -1
 
 #define FILENAME_APP_DATA "sd:/_nds/s1l1_data.bin"
+#define FILENAME_NAND_APP_DATA_APPEND "data/private_hb.sav"
 
 struct all_saved_data_t {
 	uint32_t version;
@@ -74,7 +75,7 @@ struct all_options_data_t {
 	int reset_to_ds_mode;
 	int reset_to_dsi_mode;
 	int reset_to_defaults;
-	int save_to_sd;
+	int save_to_filepath;
 	int cursor_index;
 };
 
@@ -95,7 +96,7 @@ int *settings_options_dsi[] = {
 	&all_options_data.all_saved_data.launch_engine_data.sdaccess,
 	&all_options_data.all_saved_data.launch_engine_data.scfgUnlock,
 	&all_options_data.all_saved_data.autoboot,
-	&all_options_data.save_to_sd,
+	&all_options_data.save_to_filepath,
 	&all_options_data.reset_to_dsi_mode,
 	&all_options_data.reset_to_ds_mode,
 	&all_options_data.reset_to_defaults,
@@ -125,6 +126,7 @@ void reset_launch_engine_data_to_dsx(struct launch_engine_data_t* launch_engine_
 }
 
 void reset_all_saved_data(struct all_saved_data_t* all_saved_data) {
+	all_saved_data->version = SAVED_VERSION;
 	all_saved_data->launch_engine_data.twlmode = DEFAULT_VALUE_GENERIC;
 	all_saved_data->launch_engine_data.twlclk = DEFAULT_VALUE_GENERIC;
 	all_saved_data->launch_engine_data.twlvram = DEFAULT_VALUE_GENERIC;
@@ -138,7 +140,7 @@ void reset_all_saved_data(struct all_saved_data_t* all_saved_data) {
 
 void reset_all_options_data(struct all_options_data_t* all_options_data) {
 	reset_all_saved_data(&all_options_data->all_saved_data);
-	all_options_data->save_to_sd = 0;
+	all_options_data->save_to_filepath = 0;
 	all_options_data->reset_to_ds_mode = 0;
 	all_options_data->reset_to_dsi_mode = 0;
 	all_options_data->reset_to_defaults = 0;
@@ -276,7 +278,7 @@ static void print_language_to_console(int* language_selected) {
 	PRINT_FUNCTION(languages_strings[(*language_selected) + 1]);
 }
 
-void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_data) {
+void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_data, bool can_save) {
 	swiWaitForVBlank();
 	consoleClear();
 	int ram_size = 4;
@@ -356,8 +358,12 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 			print_language_to_console(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.autoboot))
 			print_setting_option(*settings_options[i], "Autoboot", "Off", "On");
-		else if(settings_options[i] == (&all_options_data->save_to_sd))
-			PRINT_FUNCTION("Save default to SD");
+		else if(settings_options[i] == (&all_options_data->save_to_filepath)) {
+			if(can_save)
+				print_setting_option(*settings_options[i], "Save default to", "SD", "NAND");
+			else
+				PRINT_FUNCTION("Impossible to save default");
+		}
 		else if(settings_options[i] == (&all_options_data->reset_to_ds_mode))
 			PRINT_FUNCTION("Set DS Mode Defaults");
 		else if(settings_options[i] == (&all_options_data->reset_to_dsi_mode))
@@ -368,6 +374,43 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 			PRINT_FUNCTION(">");
 		PRINT_FUNCTION("\n");
 	}
+}
+
+static bool write_data_to_path(const char* filepath, struct all_options_data_t* all_options_data) {
+	FILE* file_write = fopen_mkdir(filepath, "wb");
+
+	if(!file_write)
+		return false;
+
+	fwrite(&all_options_data->all_saved_data, 1, sizeof(struct all_saved_data_t), file_write);
+	fclose(file_write);
+	return true;
+}
+
+static bool read_data_from_path(const char* filepath, struct all_options_data_t* all_options_data) {
+	FILE* file_read = fopen(filepath, "rb");
+
+	if(!file_read)
+		return false;
+
+	size_t read_data = fread(&all_options_data->all_saved_data, 1, sizeof(struct all_saved_data_t), file_read);
+	if(read_data != sizeof(struct all_saved_data_t)) {
+		reset_all_options_data(all_options_data);
+		return false;
+	}
+	fclose(file_read);
+
+	if((all_options_data->all_saved_data.version >> 24) != (SAVED_VERSION >> 24)) {
+		// For now, accept 0... The data is properly formatted at the start
+		// of the file...
+		// TODO: when changing SAVED_VERSION irreparably, change this...
+		if((all_options_data->all_saved_data.version >> 24) != 0x00) {
+			reset_all_options_data(all_options_data);
+			return false;
+		}
+	}
+
+	return true;
 }
 
 static void fix_data_x_val_default(int* value, int num_values) {
@@ -388,7 +431,7 @@ static void fix_data_bool_val(int* value) {
 		*value = 0;
 }
 
-static void input_processing(u32 curr_keys, struct all_options_data_t* all_options_data, bool has_sd_access) {
+static void input_processing(u32 curr_keys, struct all_options_data_t* all_options_data, bool has_sd_access, bool has_nand_access, std::string &base_title_nand_path) {
 	if((curr_keys & KEY_X) || (curr_keys & KEY_Y) || (curr_keys & KEY_L) || (curr_keys & KEY_R))
 		cartridge_read_header_data_total();
 
@@ -435,17 +478,33 @@ static void input_processing(u32 curr_keys, struct all_options_data_t* all_optio
 		else if(settings_options[i] == (&all_options_data->all_saved_data.autoboot))
 			fix_data_bool_val(settings_options[i]);
 	}
+	if((curr_keys & KEY_LEFT) || (curr_keys & KEY_RIGHT)) {
+		int i = all_options_data->cursor_index;
+		if(settings_options[i] == (&all_options_data->save_to_filepath)) {
+			if(!has_nand_access)
+				*settings_options[i] = 0;
+			else if(!has_sd_access)
+				*settings_options[i] = 1;
+			else
+				fix_data_bool_val(settings_options[i]);
+		}
+	}
 	if(curr_keys & KEY_A) {
 		int i = all_options_data->cursor_index;
-		if(settings_options[i] == (&all_options_data->save_to_sd)) {
-			swiWaitForVBlank();
-			PRINT_FUNCTION("Saving...");
-			if(has_sd_access) {
-				FILE* file_write = fopen_mkdir(FILENAME_APP_DATA, "wb");
-				if(file_write) {
-					fwrite(all_options_data, 1, sizeof(struct all_options_data_t), file_write);
-					fclose(file_write);
-				}
+		if(settings_options[i] == (&all_options_data->save_to_filepath)) {
+			// Undo generic "to the right" from general code above
+			*settings_options[i] -= 1;
+			if(has_sd_access && ((*settings_options[i]) == 0)) {
+				swiWaitForVBlank();
+				PRINT_FUNCTION("Saving to SD...");
+				write_data_to_path(FILENAME_APP_DATA, all_options_data);
+			}
+			if(has_nand_access && ((*settings_options[i]) == 1) && (base_title_nand_path != "")) {
+				swiWaitForVBlank();
+				PRINT_FUNCTION("Saving to NAND...");
+				nand_WriteProtect(false);
+				write_data_to_path((base_title_nand_path + FILENAME_NAND_APP_DATA_APPEND).c_str(), all_options_data);
+				nand_WriteProtect(true);
 			}
 		}
 		if(settings_options[i] == (&all_options_data->reset_to_ds_mode))
@@ -469,11 +528,48 @@ static bool are_same_strings_with_trailing_0s(const char* base, const char* cmp,
 	return true;
 }
 
-int main() {
+static bool has_been_booted_from_nand(const char* app_filepath) {
+	size_t app_filepath_len = strlen(app_filepath);
+	const char nand_base_path[] = "nand:/title/";
+	size_t nand_base_path_len = strlen(nand_base_path);
+	if(app_filepath_len < nand_base_path_len)
+		return false;
+	if(memcmp(app_filepath, nand_base_path, nand_base_path_len) != 0)
+		return false;
+	const char app_extension[] = ".app";
+	size_t app_extension_len = strlen(app_extension);
+	return memcmp(app_filepath + (app_filepath_len - app_extension_len), app_extension, app_extension_len) == 0;
+}
+
+static std::string get_base_title_nand_path(const char* app_filepath) {
+	size_t app_filepath_len = strlen(app_filepath);
+	const char content_base_path[] = "/content/";
+	size_t content_path_len = strlen(content_base_path);
+
+	int second_last_pos_sep = -2;
+	int last_pos_sep = -1;
+	for(size_t i = 0; i < app_filepath_len; i++) {
+		if(app_filepath[i] == '/') {
+			second_last_pos_sep = last_pos_sep;
+			last_pos_sep = (size_t)i;
+		}
+	}
+
+	if(second_last_pos_sep <= 0)
+		return "";
+
+	if(memcmp(app_filepath + second_last_pos_sep, content_base_path, content_path_len) != 0)
+		return "";
+
+	return std::string(app_filepath, second_last_pos_sep + 1);
+}
+
+int main(int argc, char **argv) {
 	fifoSendValue32(FIFO_PM, PM_REQ_SLEEP_DISABLE);
 
 	reset_all_options_data(&all_options_data);
 	uint16_t debugger_type = 0;
+
 	// Reset cheat data, since we won't be using it regardless...
 	memset((void*)0x023F0000, 0, 0x8000);
 	u32 curr_keys = 0;
@@ -482,20 +578,40 @@ int main() {
 		scanKeys();
 		curr_keys = keysHeld();
 	} while((curr_keys & (KEY_DEBUG | KEY_SELECT)) && (!(curr_keys & KEY_B)));
-	bool done = false;
-	bool has_sd_access = false;
 
-	if(isDSiMode())
-		has_sd_access = fatInitDefault();
-	if(has_sd_access) {
-		FILE* file_read = fopen(FILENAME_APP_DATA, "rb");
-		if(file_read) {
-			size_t read_data = fread(&all_options_data, 1, sizeof(struct all_options_data_t), file_read);
-			if(read_data != sizeof(struct all_options_data_t))
-				reset_all_options_data(&all_options_data);
-			fclose(file_read);
-		}
+	bool done = false;
+	bool booted_from_nand = false;
+	std::string base_title_nand_path = "";
+	if(argc > 0) {
+		booted_from_nand = has_been_booted_from_nand(argv[0]);
+		if(booted_from_nand)
+			base_title_nand_path = get_base_title_nand_path(argv[0]);
+		if(base_title_nand_path == "")
+			booted_from_nand = false;
 	}
+
+	volatile bool has_sd_access = false;
+	volatile bool has_nand_access = false;
+	if(isDSiMode()) {
+		has_sd_access = fatInitDefault() && (access("sd:/", F_OK) == 0);
+		has_nand_access = booted_from_nand && nandInit(true) && (access("nand:/", F_OK) == 0);
+	}
+
+	bool successful_read = false;
+	bool read_from_nand = false;
+
+	// Prioritize SD, so it's easier for users...
+	if((!successful_read) && has_sd_access)
+		successful_read = read_data_from_path(FILENAME_APP_DATA, &all_options_data);
+
+	if((!successful_read) && has_nand_access) {
+		successful_read = read_data_from_path((base_title_nand_path + FILENAME_NAND_APP_DATA_APPEND).c_str(), &all_options_data);
+		read_from_nand = successful_read;
+	}
+
+	if(read_from_nand || (has_nand_access && (!has_sd_access)))
+		all_options_data.save_to_filepath = 1;
+
 	if(all_options_data.all_saved_data.autoboot == DEFAULT_VALUE_GENERIC)
 		all_options_data.all_saved_data.autoboot = DEFAULT_AUTOBOOT;
 
@@ -518,7 +634,7 @@ int main() {
 		consoleDemoInit();
 		while(!fifoCheckValue32(FIFO_USER_01));
 		debugger_type = fifoGetValue32(FIFO_USER_01);
-		print_data(debugger_type, &all_options_data);
+		print_data(debugger_type, &all_options_data, has_sd_access || has_nand_access);
 	}
 	while(!done) {
 		do {
@@ -527,8 +643,8 @@ int main() {
 			curr_keys = keysDown();
 		} while(!(curr_keys & ( KEY_X | KEY_Y | KEY_R | KEY_L | KEY_LEFT | KEY_RIGHT | KEY_UP | KEY_DOWN | KEY_A | KEY_START)));
 
-		input_processing(curr_keys, &all_options_data, has_sd_access);
-		print_data(debugger_type, &all_options_data);
+		input_processing(curr_keys, &all_options_data, has_sd_access, has_nand_access, base_title_nand_path);
+		print_data(debugger_type, &all_options_data, has_sd_access || has_nand_access);
 
 		if(curr_keys & KEY_START) {
 			done = is_card_ready(true);
