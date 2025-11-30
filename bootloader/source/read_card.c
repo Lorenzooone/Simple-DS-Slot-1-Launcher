@@ -412,9 +412,57 @@ void switchToRegularBlowfish(sNDSHeaderExt* ndsHeader) {
 }
 */
 
+void doChipIDRead(u32* chipID, bool* chip_read) {
+	if(*chip_read)
+		return;
+	*chipID=cardReadID(CARD_CLK_SLOW);
+	normalChip = ((*chipID) & 0x80000000) != 0;		// ROM chip ID MSB
+	while (REG_ROMCTRL & CARD_BUSY);
+	*chip_read = true;
+}
+
+void fullHeaderRead(sNDSHeaderExt* ndsHeader, u32* chipID, bool* chip_read) {
+	int i;
+
+	// Read the header
+	cardParamCommand (CARD_CMD_HEADER_READ, 0,
+		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
+		(void*)headerData, 0x200/sizeof(u32));
+
+	tonccpy(ndsHeader, headerData, 0x200);
+
+	// Maybe this should also check if the console is a DSi...
+	if((ndsHeader->unitCode != 0) || (ndsHeader->dsi_flags != 0)) {
+		// Extended header found
+		// Read Chip ID to understand how to read the header. 
+		doChipIDRead(chipID, chip_read);
+		if(normalChip) {
+			// If 1T-ROM, read in blocks of 0x200 bytes, like the official FW.
+			// Also covers NAND.
+			for (i = 1; i < 8; i++) {
+				cardParamCommand (CARD_CMD_HEADER_READ, i * 0x200,
+				CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
+				(void*)headerData + (i * 0x200), 0x200/sizeof(u32));
+			}
+		}
+		else {
+			// If MROM, read 0x1000 bytes, like the official FW.
+			cardParamCommand (CARD_CMD_HEADER_READ, 0,
+				CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(4) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
+				(void*)headerData, 0x1000/sizeof(u32));
+		}
+		if (ndsHeader->dsi1[0]==0xFFFFFFFF && ndsHeader->dsi1[1]==0xFFFFFFFF
+		 && ndsHeader->dsi1[2]==0xFFFFFFFF && ndsHeader->dsi1[3]==0xFFFFFFFF) {
+			toncset((u8*)headerData+0x200, 0, 0xE00);	// Clear out FFs
+		}
+		tonccpy(ndsHeader, headerData, 0x1000);
+	}
+}
+
 int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 {
 	u32 portFlagsKey1, portFlagsSecRead;
+	bool chip_read = false;
 	twlBlowfish = false;
 	normalChip = false;	// As defined by GBAtek, normal chip secure area is accessed in blocks of 0x200, other chip in blocks of 0x1000
 	int secureBlockNumber;
@@ -430,25 +478,7 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 	slot_reset_shared();
 
 	// Read the header
-	cardParamCommand (CARD_CMD_HEADER_READ, 0,
-		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
-		(void*)headerData, 0x200/sizeof(u32));
-
-	tonccpy(ndsHeader, headerData, 0x200);
-
-	if((ndsHeader->unitCode != 0) || (ndsHeader->dsi_flags != 0)) {
-		// Extended header found
-		for (i = 1; i < 8; i++) {
-			cardParamCommand (CARD_CMD_HEADER_READ, i * 0x200,
-			CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(4) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
-			(void*)headerData + (i * 0x200), 0x200/sizeof(u32));
-		}
-		if (ndsHeader->dsi1[0]==0xFFFFFFFF && ndsHeader->dsi1[1]==0xFFFFFFFF
-		 && ndsHeader->dsi1[2]==0xFFFFFFFF && ndsHeader->dsi1[3]==0xFFFFFFFF) {
-			toncset((u8*)headerData+0x200, 0, 0xE00);	// Clear out FFs
-		}
-		tonccpy(ndsHeader, headerData, 0x1000);
-	}
+	fullHeaderRead(ndsHeader, chipID, &chip_read);
 
 	// Check header CRC
 	if(ndsHeader->headerCRC16 != swiCRC16(0xFFFF, (void*)ndsHeader, 0x15E)) {
@@ -456,8 +486,7 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 	}
 
 	// Maybe to be moved... Maybe not...
-	*chipID=cardReadID(CARD_CLK_SLOW);	
-	while (REG_ROMCTRL & CARD_BUSY);
+	doChipIDRead(chipID, &chip_read);
 
 	/*
 	// Check logo CRC
@@ -477,7 +506,6 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset)
 		((ndsHeader->cardControlBF & (CARD_CLK_SLOW|CARD_DELAY1(0x1FFF))) + ((ndsHeader->cardControlBF & CARD_DELAY2(0x3F)) >> 16));
 
 	// Adjust card transfer method depending on the most significant bit of the chip ID
-	normalChip = ((*chipID) & 0x80000000) != 0;		// ROM chip ID MSB
 	if (!normalChip) {
 		portFlagsKey1 |= CARD_SEC_LARGE;
 	}
