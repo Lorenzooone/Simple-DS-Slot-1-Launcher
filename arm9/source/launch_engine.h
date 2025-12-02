@@ -42,7 +42,7 @@ struct launch_engine_data_t {
 	int language;
 } PACKED ALIGNED(4);
 
-void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, bool isDSBrowser);
+__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader);
 
 #ifdef __cplusplus
 }

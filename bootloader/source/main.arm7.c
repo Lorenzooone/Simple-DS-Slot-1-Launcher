@@ -983,7 +983,7 @@ void arm7_main (void) {
 	bool isDSBrowser = (memcmp(ndsHeader->gameCode, "UBRP", 4) == 0);
 
 	// While this is fine on DSi and Debugger DS, it's... useless on regular DS?
-	arm9_extendedMemory = (dsiModeConfirmed || isDSBrowser);
+	arm9_extendedMemory = (dsiModeConfirmed || (isDSiMode() && isDSBrowser));
 	if (!arm9_extendedMemory) {
 		tonccpy((u32*)0x023FF000, (u32*)base_dsi_info_addr, 0x1000);
 	}
@@ -1076,13 +1076,13 @@ void arm7_main (void) {
 	arm9_isSdk5 = isSdk5(moduleParams);
 	arm9_runCardEngine = runCardEngine;
 
-	if (isSdk5(moduleParams) && ndsHeader->unitCode > 0 && dsiModeConfirmed) {
+	if (isSdk5(moduleParams) && (ndsHeader->unitCode > 0) && dsiModeConfirmed) {
 		initMBK_dsiMode();
 		REG_SCFG_EXT = 0x93FFFB06;
 		REG_SCFG_CLK = 0x187;
 	}
 
-	if(!scfgUnlock && !dsiModeConfirmed && isDSiMode()) {
+	if(!scfgUnlock && (!dsiModeConfirmed) && isDSiMode()) {
 		// lock SCFG
 		REG_SCFG_EXT &= ~(1UL << 31);
 	}

@@ -651,11 +651,11 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	while (1) {
-		const auto& gameCode = ndsHeader.header.gameCode;
-		setup_defaults(&all_options_data.all_saved_data.launch_engine_data);
-		runLaunchEngine(&all_options_data.all_saved_data.launch_engine_data, (memcmp(gameCode, "UBRP", 4) == 0 || memcmp(gameCode, "AMFE", 4) == 0 || memcmp(gameCode, "ALXX", 4) == 0), (memcmp(gameCode, "UBRP", 4) == 0));
-	}
+	const auto& gameCode = ndsHeader.header.gameCode;
+	bool useAltBootloader = memcmp(gameCode, "AMFE", 4) == 0 || memcmp(gameCode, "ALXX", 4) == 0;
+	setup_defaults(&all_options_data.all_saved_data.launch_engine_data);
+	runLaunchEngine(&all_options_data.all_saved_data.launch_engine_data, useAltBootloader);
+
 	return 0;
 }
 

@@ -38,7 +38,7 @@
 #define SOUNDFREQ_OFFSET 36
 #define RUNCARDENGINE_OFFSET 40
 
-void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, bool isDSBrowser)
+__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader)
 {
 	bool pass_min_font = true;
 	int dsi_mode_enabled = 1;
@@ -70,13 +70,11 @@ void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBo
 
 	irqDisable(IRQ_ALL);
 
-	if (altBootloader) {
-		if (isDSBrowser || launch_engine_data->scfgUnlock) {
+	if ((isDSiMode()) && altBootloader) {
+		if (launch_engine_data->scfgUnlock) {
 			REG_SCFG_EXT = launch_engine_data->twlvram ? 0x8300E000 : 0x8300C000;
 		} else {
 			REG_SCFG_EXT = launch_engine_data->twlvram ? 0x83002000 : 0x83000000;
-		}
-		if (!launch_engine_data->scfgUnlock) {
 			REG_SCFG_EXT &= ~(1UL << 31);
 		}
 	}
