@@ -84,7 +84,8 @@ bool gameSoftReset = false;
 // For debugging
 extern volatile uint32_t data_saved[4];
 
-void arm7_clearmem (void* loc, size_t len);
+extern void arm7_clearmem (void* loc, size_t len);
+extern __attribute__((noreturn)) void arm7_actual_jump(void* fn);
 
 static const u32 cheatDataEndSignature[2] = {0xCF000000, 0x00000000};
 
@@ -769,8 +770,7 @@ void arm7_startBinary (void) {
 	REG_AUXIE = 0;
 	REG_AUXIF = ~0;
 	// Start ARM7
-	VoidFn arm7code = (VoidFn)ndsHeader->arm7executeAddress;
-	arm7code();
+	arm7_actual_jump((void*)ndsHeader->arm7executeAddress);
 }
 
 /*void fixFlashcardForDSiMode(void) {
@@ -1094,7 +1094,5 @@ void arm7_main (void) {
 	setMemoryAddress(ndsHeader);
 
 	arm7_startBinary();
-
-	while (1);
 }
 
