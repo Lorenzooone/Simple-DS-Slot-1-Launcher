@@ -83,22 +83,45 @@ int twlCfgLang = 0;
 
 bool gameSoftReset = false;
 
-void arm7_clearmem (void* loc, size_t len);
+extern void arm7_clearmem (void* loc, size_t len);
+extern __attribute__((noreturn)) void arm7_actual_jump(void* fn);
 extern void ensureBinaryDecompressed(const tNDSHeader* ndsHeader, module_params_t* moduleParams);
 
 static const u32 cheatDataEndSignature[2] = {0xCF000000, 0x00000000};
 
-// Module params
-static const u32 moduleParamsSignature[2] = {0xDEC00621, 0x2106C0DE};
+#define MODULE_PARAMS_PERSONAL_SIZE 3
+#define MODULE_PARAMS_SIGNATURE_SIZE 2
+// Module params - Add start to avoid being mistaken for using old SDK version
+static const u32 moduleParamsPersonal[MODULE_PARAMS_PERSONAL_SIZE] = {0x0503757C, 0xDEC00621, 0x2106C0DE};
+static module_params_t emulatedModuleParams; 
 
 u32* findModuleParamsOffset(const tNDSHeader* ndsHeader) {
 	//dbg_printf("findModuleParamsOffset:\n");
 
 	u32* moduleParamsOffset = findOffset(
 			(u32*)ndsHeader->arm9destination, ndsHeader->arm9binarySize,
-			moduleParamsSignature, 2
+			moduleParamsPersonal + (MODULE_PARAMS_PERSONAL_SIZE - MODULE_PARAMS_SIGNATURE_SIZE), MODULE_PARAMS_SIGNATURE_SIZE 
 		);
-	return moduleParamsOffset;
+
+	// Return NULL if nothing is found
+	if(moduleParamsOffset == NULL) {
+		if (memcmp(ndsHeader->gameCode, "AS2E", 4) == 0) // Spider-Man 2 (USA)
+		{
+			emulatedModuleParams.sdk_version = LAST_NON_SDK5_VERSION;
+			return (u32*)&emulatedModuleParams;
+		}
+
+		return NULL;
+	}
+
+	uintptr_t subtract_value = sizeof(module_params_t) - (sizeof(u32) * MODULE_PARAMS_SIGNATURE_SIZE);
+	uintptr_t base_ptr = (uintptr_t)moduleParamsOffset;
+
+	// This would be a really weird case. Return NULL
+	if(base_ptr < subtract_value)
+		return NULL;
+
+	return (u32*)(base_ptr - subtract_value);
 }
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -540,8 +563,7 @@ void arm7_startBinary (void)
 	while (REG_VCOUNT==191);
 
 	// Start ARM7
-	VoidFn arm7code = *(VoidFn*)(0x27FFE34);
-	arm7code();
+	arm7_actual_jump(*(void**)(0x27FFE34));
 }
 
 
@@ -659,13 +681,12 @@ void arm7_main (void) {
 	//	fixFlashcardForDSiMode();
 	//} else {
 	//	REG_SCFG_ROM = 0x703;
-		if (twlClock) {
-			REG_SCFG_CLK = 0x0181;
-		} else {
-			REG_SCFG_CLK = 0x0180;
-		}
 		if (!sdAccess) {
+			REG_SCFG_CLK = 0x0180;
 			REG_SCFG_EXT = 0x93FBFB06;
+		}
+		else {
+			REG_SCFG_CLK = 0x0181;
 		}
 	//}
 
@@ -717,7 +738,5 @@ void arm7_main (void) {
 	}
 
 	arm7_startBinary();
-
-	while (1);
 }
 
