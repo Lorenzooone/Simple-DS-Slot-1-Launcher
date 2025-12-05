@@ -438,7 +438,7 @@ static bool read_data_from_path(const char* filepath, struct all_options_data_t*
 		}
 	}
 
-	uint8_t main_and_sub_version = all_options_data->all_saved_data.version >> 16;
+	uint16_t main_and_sub_version = all_options_data->all_saved_data.version >> 16;
 
 	if(main_and_sub_version != (SAVED_VERSION >> 16)) {
 		// For now, accept v0 and v1... The data is properly formatted at the start
