@@ -26,6 +26,7 @@
 
 #include "nds_card.h"
 #include "launch_engine.h"
+#include "old_launch_engine_structs.h"
 
 #ifndef GAMETITLE
 #define GAMETITLE "SLOT1LAUNCH"
@@ -37,7 +38,7 @@
 #define GAMECODE "SL1L"
 #endif
 
-#define SAVED_VERSION 0x01000000
+#define SAVED_VERSION 0x01010000
 
 #define DEFAULT_SCFGUNLOCK_DSI 1
 #define DEFAULT_SDACCESS_DSI 1
@@ -57,6 +58,8 @@
 #define DEFAULT_SOUNDFREQ_DS 0
 #define DEFAULT_CARDENGINE_DS 0
 
+#define DEFAULT_SLEEPMODE 1
+
 #define DEFAULT_AUTOBOOT 1
 
 #define DEFAULT_VALUE_GENERIC -1
@@ -67,6 +70,12 @@
 struct all_saved_data_t {
 	uint32_t version;
 	struct launch_engine_data_t launch_engine_data;
+	int autoboot;
+} PACKED ALIGNED(4);
+
+struct all_saved_data_t_1_0 {
+	uint32_t version;
+	struct launch_engine_data_t_1_0 launch_engine_data;
 	int autoboot;
 } PACKED ALIGNED(4);
 
@@ -95,6 +104,7 @@ int *settings_options_dsi[] = {
 	&all_options_data.all_saved_data.launch_engine_data.soundFreq,
 	&all_options_data.all_saved_data.launch_engine_data.sdaccess,
 	&all_options_data.all_saved_data.launch_engine_data.scfgUnlock,
+	&all_options_data.all_saved_data.launch_engine_data.sleepMode,
 	&all_options_data.all_saved_data.autoboot,
 	&all_options_data.save_to_filepath,
 	&all_options_data.reset_to_dsi_mode,
@@ -103,6 +113,7 @@ int *settings_options_dsi[] = {
 };
 
 int *settings_options_ds[] = {
+	&all_options_data.all_saved_data.launch_engine_data.sleepMode,
 	&all_options_data.all_saved_data.launch_engine_data.language,
 	&all_options_data.reset_to_defaults,
 };
@@ -123,6 +134,7 @@ void reset_launch_engine_data_to_dsx(struct launch_engine_data_t* launch_engine_
 	launch_engine_data->soundFreq = to_ds ? DEFAULT_SOUNDFREQ_DS : DEFAULT_SOUNDFREQ_DSI;
 	launch_engine_data->sdaccess = to_ds ? DEFAULT_SDACCESS_DS : DEFAULT_SDACCESS_DSI;
 	launch_engine_data->scfgUnlock = to_ds ? DEFAULT_SCFGUNLOCK_DS : DEFAULT_SCFGUNLOCK_DSI;
+	launch_engine_data->sleepMode = DEFAULT_SLEEPMODE;
 }
 
 void reset_all_saved_data(struct all_saved_data_t* all_saved_data) {
@@ -135,6 +147,7 @@ void reset_all_saved_data(struct all_saved_data_t* all_saved_data) {
 	all_saved_data->launch_engine_data.soundFreq = DEFAULT_VALUE_GENERIC;
 	all_saved_data->launch_engine_data.sdaccess = DEFAULT_VALUE_GENERIC;
 	all_saved_data->launch_engine_data.scfgUnlock = DEFAULT_VALUE_GENERIC;
+	all_saved_data->launch_engine_data.sleepMode = DEFAULT_SLEEPMODE;
 	all_saved_data->autoboot = DEFAULT_AUTOBOOT;
 }
 
@@ -145,6 +158,22 @@ void reset_all_options_data(struct all_options_data_t* all_options_data) {
 	all_options_data->reset_to_dsi_mode = 0;
 	all_options_data->reset_to_defaults = 0;
 	all_options_data->cursor_index = 0;
+}
+
+static void convert_saved_data_t0_t1_to_t11(struct all_saved_data_t* all_saved_data) {
+	all_saved_data_t_1_0 old_saved_data = *((all_saved_data_t_1_0*)all_saved_data);
+	all_saved_data->launch_engine_data.scfgUnlock = old_saved_data.launch_engine_data.scfgUnlock;
+	all_saved_data->launch_engine_data.sdaccess = old_saved_data.launch_engine_data.sdaccess;
+	all_saved_data->launch_engine_data.twlmode = old_saved_data.launch_engine_data.twlmode;
+	all_saved_data->launch_engine_data.twlclk = old_saved_data.launch_engine_data.twlclk;
+	all_saved_data->launch_engine_data.twlvram = old_saved_data.launch_engine_data.twlvram;
+	all_saved_data->launch_engine_data.twltouch = old_saved_data.launch_engine_data.twltouch;
+	all_saved_data->launch_engine_data.soundFreq = old_saved_data.launch_engine_data.soundFreq;
+	all_saved_data->launch_engine_data.runCardEngine = old_saved_data.launch_engine_data.runCardEngine;
+	all_saved_data->launch_engine_data.language = old_saved_data.launch_engine_data.language;
+	all_saved_data->launch_engine_data.sleepMode = DEFAULT_SLEEPMODE;
+	all_saved_data->autoboot = old_saved_data.autoboot;
+	all_saved_data->version = SAVED_VERSION;
 }
 
 void rek_mkdir(char *path) {
@@ -195,6 +224,7 @@ static void set_default_val(int* value, uint8_t default_ds, uint8_t default_dsi)
 
 static void setup_defaults(struct launch_engine_data_t* launch_engine_data) {
 	launch_engine_data->runCardEngine = 0;
+
 	if(!isDSiMode()) {
 		launch_engine_data->scfgUnlock = 0;
 		launch_engine_data->sdaccess = 0;
@@ -205,6 +235,7 @@ static void setup_defaults(struct launch_engine_data_t* launch_engine_data) {
 		launch_engine_data->soundFreq = 0;
 		return;
 	}
+
 	set_default_val(&launch_engine_data->scfgUnlock, DEFAULT_SCFGUNLOCK_DS, DEFAULT_SCFGUNLOCK_DSI);
 	set_default_val(&launch_engine_data->sdaccess, DEFAULT_SDACCESS_DS, DEFAULT_SDACCESS_DSI);
 	set_default_val(&launch_engine_data->twlmode, DEFAULT_TWLMODE_DS, DEFAULT_TWLMODE_DSI);
@@ -333,9 +364,9 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 		settings_options = settings_options_ds;
 		size_settings = NUM_SETTINGS_OPTIONS_DS;
 	}
-	PRINT_FUNCTION("Settings:\n");
+	PRINT_FUNCTION("Settings:");
 	for(size_t i = 0; i < size_settings; i++) {
-		PRINT_FUNCTION(" ");
+		PRINT_FUNCTION("\n ");
 		if(((size_t)all_options_data->cursor_index) == i)
 			PRINT_FUNCTION("<");
 		else
@@ -354,6 +385,8 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 			print_setting_option(*settings_options[i], "Sound Freq.", "32KHz", "48KHz");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.scfgUnlock))
 			print_setting_option(*settings_options[i], "SCFG", "Locked", "Unlocked");
+		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.sleepMode))
+			print_setting_option(*settings_options[i], "Sleep", "Off", "On");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.language))
 			print_language_to_console(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.autoboot))
@@ -372,7 +405,6 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 			PRINT_FUNCTION("Set Default Settings");
 		if(((size_t)all_options_data->cursor_index) == i)
 			PRINT_FUNCTION(">");
-		PRINT_FUNCTION("\n");
 	}
 }
 
@@ -382,6 +414,7 @@ static bool write_data_to_path(const char* filepath, struct all_options_data_t* 
 	if(!file_write)
 		return false;
 
+	all_options_data->all_saved_data.version = SAVED_VERSION;
 	fwrite(&all_options_data->all_saved_data, 1, sizeof(struct all_saved_data_t), file_write);
 	fclose(file_write);
 	return true;
@@ -394,17 +427,25 @@ static bool read_data_from_path(const char* filepath, struct all_options_data_t*
 		return false;
 
 	size_t read_data = fread(&all_options_data->all_saved_data, 1, sizeof(struct all_saved_data_t), file_read);
-	if(read_data != sizeof(struct all_saved_data_t)) {
-		reset_all_options_data(all_options_data);
-		return false;
-	}
+
 	fclose(file_read);
 
-	if((all_options_data->all_saved_data.version >> 24) != (SAVED_VERSION >> 24)) {
-		// For now, accept 0... The data is properly formatted at the start
+	if(read_data != sizeof(struct all_saved_data_t)) {
+		// Try reading v1 data regardless...
+		if(read_data != sizeof(struct all_saved_data_t_1_0)) {
+			reset_all_options_data(all_options_data);
+			return false;
+		}
+	}
+
+	uint8_t main_and_sub_version = all_options_data->all_saved_data.version >> 16;
+
+	if(main_and_sub_version != (SAVED_VERSION >> 16)) {
+		// For now, accept v0 and v1... The data is properly formatted at the start
 		// of the file...
-		// TODO: when changing SAVED_VERSION irreparably, change this...
-		if((all_options_data->all_saved_data.version >> 24) != 0x00) {
+		if((main_and_sub_version == OLD_LAUNCH_ENGINE_DATA_V0) || (main_and_sub_version == OLD_LAUNCH_ENGINE_DATA_V1))
+			convert_saved_data_t0_t1_to_t11(&all_options_data->all_saved_data);
+		else {
 			reset_all_options_data(all_options_data);
 			return false;
 		}
@@ -467,6 +508,8 @@ static void input_processing(u32 curr_keys, struct all_options_data_t* all_optio
 			fix_data_two_val_default(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twltouch))
 			fix_data_two_val_default(settings_options[i]);
+		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.sleepMode))
+			fix_data_bool_val(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.sdaccess))
 			fix_data_two_val_default(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.soundFreq))

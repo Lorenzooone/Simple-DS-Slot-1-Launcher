@@ -75,6 +75,7 @@ extern u32 boostVram;
 extern u32 twlTouch;
 extern u32 soundFreq;
 extern u32 runCardEngine;
+extern u32 sleepMode;
 
 bool useTwlCfg = false;
 int twlCfgLang = 0;
@@ -87,56 +88,31 @@ extern volatile uint32_t data_saved[4];
 extern void arm7_clearmem (void* loc, size_t len);
 extern __attribute__((noreturn)) void arm7_actual_jump(void* fn);
 
-static const u32 cheatDataEndSignature[2] = {0xCF000000, 0x00000000};
+#define NUM_ELEMS(array) (sizeof(array) / sizeof(array[0]))
+
+#define CHEAT_DATA_END_SIGNATURE_FIRST 0xCF000000
+
+static const u32 cheatDataEndSignature[2] = {CHEAT_DATA_END_SIGNATURE_FIRST, 0x00000000};
 
 #define MODULE_PARAMS_PERSONAL_SIZE 3
 #define MODULE_PARAMS_SIGNATURE_SIZE 2
 // Module params - Add start to avoid being mistaken for using old SDK version
 static const u32 moduleParamsPersonal[MODULE_PARAMS_PERSONAL_SIZE] = {0x0503757C, 0xDEC00621, 0x2106C0DE};
-static module_params_t emulatedModuleParams; 
+static module_params_t emulatedModuleParams;
+
+#define SLEEP_INPUT_WRITE_END_SIG_SIZE 2
+#define SLEEP_INPUT_WRITE_END_SIG_SDK_POS 1
+// Sleep input write
+static const u32 sleepInputWriteEndSignatureEndBase[SLEEP_INPUT_WRITE_END_SIG_SIZE] = {0x04000136, 0xFA8};
+static const u32 sleepInputWriteSignature[1] = {0x13A04902}; // movne r4, 0x8000
+static const u32 sleepInputWriteSignature2[1] = {0x11A05004}; // movne r5, r4
+static const u16 sleepInputWriteBeqSignatureThumb[1] = {0xD000};
 
 static uintptr_t base_dsi_info_addr;
 
 static u32 chipID;
 
-const char* getRomTid(const tNDSHeader* ndsHeader) {
-	//u32 ROM_TID = *(u32*)ndsHeader->gameCode;
-	static char romTid[5];
-	strncpy(romTid, ndsHeader->gameCode, 4);
-	romTid[4] = '\0';
-	return romTid;
-}
-
 static module_params_t* moduleParams;
-
-u32* findModuleParamsOffset(const tNDSHeader* ndsHeader) {
-	//dbg_printf("findModuleParamsOffset:\n");
-
-	u32* moduleParamsOffset = findOffset(
-			(u32*)ndsHeader->arm9destination, ndsHeader->arm9binarySize,
-			moduleParamsPersonal + (MODULE_PARAMS_PERSONAL_SIZE - MODULE_PARAMS_SIGNATURE_SIZE), MODULE_PARAMS_SIGNATURE_SIZE 
-		);
-
-	// Return NULL if nothing is found
-	if(moduleParamsOffset == NULL) {
-		if (memcmp(ndsHeader->gameCode, "AS2E", 4) == 0) // Spider-Man 2 (USA)
-		{
-			emulatedModuleParams.sdk_version = LAST_NON_SDK5_VERSION;
-			return (u32*)&emulatedModuleParams;
-		}
-
-		return NULL;
-	}
-
-	uintptr_t subtract_value = sizeof(module_params_t) - (sizeof(u32) * MODULE_PARAMS_SIGNATURE_SIZE);
-	uintptr_t base_ptr = (uintptr_t)moduleParamsOffset;
-
-	// This would be a really weird case. Return NULL
-	if(base_ptr < subtract_value)
-		return NULL;
-
-	return (u32*)(base_ptr - subtract_value);
-}
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // Important things
@@ -176,6 +152,118 @@ static void debugOutput (u32 code) {
 	arm9_stateFlag = ARM9_DISPERR;
 	// Wait for completion
 	while (arm9_stateFlag != ARM9_READY);
+}
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// Game information
+
+// Implicit SDK 5
+static bool ROMsupportsDsiMode(const tNDSHeader* ndsHeader) {
+	return (ndsHeader->unitCode > 0);
+}
+
+u32* findModuleParamsOffset(const tNDSHeader* ndsHeader) {
+	//dbg_printf("findModuleParamsOffset:\n");
+
+	u32* moduleParamsOffset = findOffset(
+			(u32*)ndsHeader->arm9destination, ndsHeader->arm9binarySize,
+			moduleParamsPersonal + (MODULE_PARAMS_PERSONAL_SIZE - MODULE_PARAMS_SIGNATURE_SIZE), MODULE_PARAMS_SIGNATURE_SIZE 
+		);
+
+	// Return NULL if nothing is found
+	if(moduleParamsOffset == NULL) {
+		if (memcmp(ndsHeader->gameCode, "AS2E", 4) == 0) // Spider-Man 2 (USA)
+		{
+			emulatedModuleParams.sdk_version = LAST_NON_SDK5_VERSION;
+			return (u32*)&emulatedModuleParams;
+		}
+		// This ROM is implicitly SDK5, as DSi support needs >= SDK5...
+		if(ROMsupportsDsiMode(ndsHeader)) {
+			emulatedModuleParams.sdk_version = FIRST_SDK5_VERSION;
+			return (u32*)&emulatedModuleParams;
+		}
+
+		return NULL;
+	}
+
+	uintptr_t subtract_value = sizeof(module_params_t) - (sizeof(u32) * MODULE_PARAMS_SIGNATURE_SIZE);
+	uintptr_t base_ptr = (uintptr_t)moduleParamsOffset;
+
+	// This would be a really weird case. Return NULL
+	if(base_ptr < subtract_value)
+		return NULL;
+
+	return (u32*)(base_ptr - subtract_value);
+}
+
+void* findSleepInputWriteOffset(const tNDSHeader* ndsHeader, bool* isArm) {
+	// dbg_printf("findSleepInputWriteOffset:\n");
+	u32 own_sleep_signature[SLEEP_INPUT_WRITE_END_SIG_SIZE] = {0};
+
+	for(int i = 0; i < SLEEP_INPUT_WRITE_END_SIG_SIZE; i++)
+		own_sleep_signature[i] = sleepInputWriteEndSignatureEndBase[i];
+	own_sleep_signature[SLEEP_INPUT_WRITE_END_SIG_SDK_POS] += base_dsi_info_addr;
+
+	u32* endOffset = findOffset(
+		(u32*)ndsHeader->arm7destination, ndsHeader->arm7binarySize,
+		own_sleep_signature, NUM_ELEMS(own_sleep_signature)
+	);
+
+	if(!endOffset)
+		return NULL;
+
+	u32* armOffset = findOffsetBackwards(
+		endOffset, 0x38,
+		sleepInputWriteSignature, NUM_ELEMS(sleepInputWriteSignature)
+	);
+	if(armOffset) {
+		*isArm = true;
+		return armOffset;
+	}
+
+	armOffset = findOffsetBackwards(
+		endOffset, 0x3C,
+		sleepInputWriteSignature2, NUM_ELEMS(sleepInputWriteSignature2)
+	);
+	if(armOffset) {
+		*isArm = true;
+		return armOffset;
+	}
+
+	u16* thumbOffset = (u16*)findOffsetBackwardsThumb(
+		(u16*)endOffset, 0x30,
+		sleepInputWriteBeqSignatureThumb, NUM_ELEMS(sleepInputWriteBeqSignatureThumb)
+	);
+	if(thumbOffset) {
+		*isArm = false;
+		return thumbOffset + 1;
+	}
+
+	return NULL;
+}
+
+static void patchSleepInputWrite(const tNDSHeader* ndsHeader) {
+	if (sleepMode) {
+		return;
+	}
+
+	bool isArm = true;
+	// What if there are multiple?!
+	// Like in Pokémon Platinum and Pokémon Black...
+	// What about arm7i, if present?!
+	// Patching only the 1st seems to work, but I wonder...
+	u32* offset = (u32*)findSleepInputWriteOffset(ndsHeader, &isArm);
+	if (!offset) {
+		return;
+	}
+
+	if(isArm) {
+		*offset = 0xE1A00000; // nop
+	} else {
+		u16* offsetThumb = (u16*)offset;
+		*offsetThumb = 0x46C0; // nop
+	}
+
 }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -677,11 +765,6 @@ static void DSiTouchscreenMode(void) {
 	cdcWriteReg(CDC_TOUCHCNT, 0x02, 0x00);
 }
 
-// SDK 5
-static bool ROMsupportsDsiMode(const tNDSHeader* ndsHeader) {
-	return (ndsHeader->unitCode > 0);
-}
-
 void decrypt_modcrypt_area(dsi_context* ctx, u8 *buffer, unsigned int size)
 {
 	uint32_t len = size / 0x10;
@@ -836,19 +919,33 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 		*(u32*)(0x02FFF014) = 0x02FF4000;
 
 		// Set region flag
-		if (strncmp(getRomTid(ndsHeader)+3, "J", 1) == 0) {
-			*(u8*)(0x02FFFD70) = 0;
-		} else if (strncmp(getRomTid(ndsHeader)+3, "E", 1) == 0) {
-			*(u8*)(0x02FFFD70) = 1;
-		} else if (strncmp(getRomTid(ndsHeader)+3, "P", 1) == 0) {
-			*(u8*)(0x02FFFD70) = 2;
-		} else if (strncmp(getRomTid(ndsHeader)+3, "U", 1) == 0) {
-			*(u8*)(0x02FFFD70) = 3;
-		} else if (strncmp(getRomTid(ndsHeader)+3, "C", 1) == 0) {
-			*(u8*)(0x02FFFD70) = 4;
-		} else if (strncmp(getRomTid(ndsHeader)+3, "K", 1) == 0) {
-			*(u8*)(0x02FFFD70) = 5;
+		char language = ndsHeader->gameCode[3];
+		uint8_t language_byte = 0;
+		switch(language) {
+			case 'J':
+				language_byte = 0;
+				break;
+			case 'E':
+				language_byte = 1;
+				break;
+			case 'P':
+				language_byte = 2;
+				break;
+			case 'U':
+				language_byte = 3;
+				break;
+			case 'C':
+				language_byte = 4;
+				break;
+			case 'K':
+				language_byte = 5;
+				break;
+			// Default to Japanese...
+			default:
+				language_byte = 0;
+				break;
 		}
+		*(u8*)(0x02FFFD70) = language_byte;
 
 		if (dsiModeConfirmed) {
 			i2cWriteRegister(I2C_PM, I2CREGPM_MMCPWR, 1);		// Have IRQ check for power button press
@@ -929,50 +1026,50 @@ void arm7_main (void) {
 		if (dsiHeaderTemp->arm7ibinarySize > 0)
 			cardReadDirect((u32)dsiHeaderTemp->arm7iromOffset, (u8*)dsiHeaderTemp->arm7idestination, dsiHeaderTemp->arm7ibinarySize);
 
-		uint8_t *target = (uint8_t *)0x02FFC000;
+		sNDSHeaderExt* detailed_header = (sNDSHeaderExt*)dsiHeaderTemp;
 
-		if (target[0x01C] & 2) {
-			u8 key[16] = {0} ;
-			u8 keyp[16] = {0} ;
-			if((target[0x01C] & 4) || (target[0x1BF] & 0x80)) {
-				// Debug Key
-				tonccpy(key, target, 16) ;
+		if (detailed_header->dsiTwlRegionFlags & 2) {
+			u8 key[16] = {0};
+			u8 keyp[16] = {0};
+			if((detailed_header->dsiTwlRegionFlags & 4) || (detailed_header->dsi_flags & 0x80)) {
+				// Debug Key, Game title + Game code
+				tonccpy(key, detailed_header, 16);
 			} else
 			{
-				//Retail key
+				// Retail key, keyp based on "Nintendo" + gamecode + fake emagcode.
+				// I wonder if it should actually check the real emagCode...
+				// (The real emagCode can be different from the gamecode, sometimes)
 				char modcrypt_shared_key[8] = {'N','i','n','t','e','n','d','o'};
-				tonccpy(keyp, modcrypt_shared_key, 8) ;
-				for (int i=0;i<4;i++) {
-					keyp[8+i] = target[0x0c+i] ;
-					keyp[15-i] = target[0x0c+i] ;
+				tonccpy(keyp, modcrypt_shared_key, 8);
+				for (int i = 0 ; i < 4 ; i++) {
+					keyp[8 + i] = detailed_header->gameCode[i];
+					keyp[15 - i] = detailed_header->gameCode[i];
 				}
-				tonccpy(key, target+0x350, 16) ;
+				tonccpy(key, detailed_header->sha1_hmac_hash_arm9i_dec, 16);
 				
 				u128_xor(key, keyp);
 				u128_add(key, DSi_KEY_MAGIC);
-				u128_lrot(key, 42) ;
+				u128_lrot(key, 42);
 			}
-			uint32_t modcryptLengths[2] ;
-			modcryptLengths[0] = ((uint32_t *)(target+0x220))[1] ;
-			modcryptLengths[1] = ((uint32_t *)(target+0x220))[3] ;
-			
+
 			dsi_context ctx;
 			dsi_set_key(&ctx, key);
-			dsi_set_ctr(&ctx, &target[0x300]);
-			if (modcryptLengths[0]) {
-				decrypt_modcrypt_area(&ctx, (u8*)dsiHeaderTemp->arm9idestination, modcryptLengths[0]);
+			dsi_set_ctr(&ctx, detailed_header->sha1_hmac_hash_arm9_enc_sec_area);
+			if (detailed_header->arm9i_modcrypt_size) {
+				decrypt_modcrypt_area(&ctx, (u8*)detailed_header->arm9idestination + (detailed_header->arm9i_modcrypt_offset - detailed_header->arm9iromOffset), detailed_header->arm9i_modcrypt_size);
 			}
 
 			dsi_set_key(&ctx, key);
-			dsi_set_ctr(&ctx, &target[0x314]);
-			if (modcryptLengths[1]) {
-				decrypt_modcrypt_area(&ctx, (u8*)dsiHeaderTemp->arm7idestination, modcryptLengths[1]);
+			dsi_set_ctr(&ctx, detailed_header->sha1_hmac_hash_arm7);
+			if (detailed_header->arm7i_modcrypt_size) {
+				decrypt_modcrypt_area(&ctx, (u8*)detailed_header->arm7idestination + (detailed_header->arm7i_modcrypt_offset - detailed_header->arm7iromOffset), detailed_header->arm7i_modcrypt_size);
 			}
 
 			//TODO: Check if necessary...
-			for (int i=0;i<4;i++) {
-				((uint32_t *)(target+0x220))[i] = 0;
-			}
+			detailed_header->arm9i_modcrypt_offset = 0;
+			detailed_header->arm9i_modcrypt_size = 0;
+			detailed_header->arm7i_modcrypt_offset = 0;
+			detailed_header->arm7i_modcrypt_size = 0;
 		}
 	}
 
@@ -992,7 +1089,7 @@ void arm7_main (void) {
 		if (dsiModeConfirmed) {
 			*(u32*)0x3FFFFC8 = 0x7884;	// Fix sound pitch table for DSi mode (works with SDK5 binaries)
 
-			if (ndsHeader->unitCode == 0 || (ndsHeader->unitCode > 0 && !(*(u8*)0x02FFE1BF & BIT(0)))) {
+			if ((!ROMsupportsDsiMode(ndsHeader)) || (ROMsupportsDsiMode(ndsHeader) && !(*(u8*)0x02FFE1BF & BIT(0)))) {
 				twlTouch ? DSiTouchscreenMode() : NDSTouchscreenMode();
 				*(u16*)0x4000500 = 0x807F;
 			}
@@ -1028,6 +1125,8 @@ void arm7_main (void) {
 		fixDSBrowser();
 	}
 
+	patchSleepInputWrite(ndsHeader);
+
 	if (memcmp(ndsHeader->gameCode, "NTR", 3) == 0		// Download Play ROMs
 	 || memcmp(ndsHeader->gameCode, "ASM", 3) == 0		// Super Mario 64 DS
 	 || memcmp(ndsHeader->gameCode, "AMC", 3) == 0		// Mario Kart DS
@@ -1044,6 +1143,7 @@ void arm7_main (void) {
 		runCardEngine = false;
 	}
 
+	u32* cheatDataPos = (u32*)0x023F0000;
 	if (runCardEngine) {
 		// WRAM-A mapped to the 0x37C0000 - 0x37FFFFF area : 256k
 		REG_MBK6=0x080037C0;
@@ -1056,17 +1156,17 @@ void arm7_main (void) {
 			nocashMessage("error during card hook");
 			debugOutput(errorCode);
 		}
-		if (*(u32*)(0x023F0000) != 0xCF000000) {
+		if (cheatDataPos[0] != CHEAT_DATA_END_SIGNATURE_FIRST) {
 			u32* cheatDataOffset = findOffset(
 				(u32*)ENGINE_LOCATION_ARM7, cardengine_arm7_bin_size,
 				cheatDataEndSignature, 2
 			);
 			if (cheatDataOffset) {
-				tonccpy (cheatDataOffset, (u32*)0x023F0000, 0x8000);	// Copy cheat data
+				tonccpy (cheatDataOffset, cheatDataPos, 0x8000);	// Copy cheat data
 			}
 		}
 	}
-	toncset ((void*)0x023F0000, 0, 0x8000);		// Clear cheat data from main memory
+	toncset(cheatDataPos, 0, 0x8000);		// Clear cheat data from main memory
 
 	//debugOutput (ERR_STS_START);
 
@@ -1076,7 +1176,7 @@ void arm7_main (void) {
 	arm9_isSdk5 = isSdk5(moduleParams);
 	arm9_runCardEngine = runCardEngine;
 
-	if (isSdk5(moduleParams) && (ndsHeader->unitCode > 0) && dsiModeConfirmed) {
+	if (isSdk5(moduleParams) && ROMsupportsDsiMode(ndsHeader) && dsiModeConfirmed) {
 		initMBK_dsiMode();
 		REG_SCFG_EXT = 0x93FFFB06;
 		REG_SCFG_CLK = 0x187;

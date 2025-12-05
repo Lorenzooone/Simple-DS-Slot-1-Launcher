@@ -20,7 +20,7 @@ typedef struct {
 } module_params_t;
 
 inline bool isSdk5(const module_params_t* moduleParams) {
-	return (moduleParams == NULL) || (moduleParams->sdk_version >= FIRST_SDK5_VERSION);
+	return (moduleParams != NULL) && (moduleParams->sdk_version >= FIRST_SDK5_VERSION);
 }
 
 #endif // MODULE_PARAMS_H

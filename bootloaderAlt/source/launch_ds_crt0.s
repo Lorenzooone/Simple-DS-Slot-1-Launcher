@@ -11,6 +11,7 @@
 	.global twlTouch
 	.global soundFreq
 	.global runCardEngine
+	.global sleepMode
 @---------------------------------------------------------------------------------
 	.align	4
 	.arm
@@ -38,6 +39,8 @@ twlTouch:
 soundFreq:
 	.word	0x00000000
 runCardEngine:
+	.word	0x00000000
+sleepMode:
 	.word	0x00000000
 
 startUp:

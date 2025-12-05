@@ -40,6 +40,7 @@ struct launch_engine_data_t {
 	int soundFreq;
 	int runCardEngine;
 	int language;
+	int sleepMode;
 } PACKED ALIGNED(4);
 
 __attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader);

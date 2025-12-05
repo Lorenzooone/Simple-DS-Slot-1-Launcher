@@ -47,6 +47,10 @@ static const u8 cardSeedBytes[] = {0xE8, 0x4D, 0x5A, 0xB1, 0x17, 0x8F, 0x99, 0xD
 //static u8* data_dump = 0x02E7FF80;
 //static int data_pos = 0;
 
+static bool ROMsupportsDsiMode(const sNDSHeaderExt* ndsHeader) {
+	return (ndsHeader->unitCode > 0);
+}
+
 static u32 getRandomNumber(void) {
 	return 4;	// chosen by fair dice roll.
 				// guaranteed to be random.
@@ -185,7 +189,7 @@ static void slot_reset_shared() {
 }
 
 void switchToTwlBlowfish(sNDSHeaderExt* ndsHeader) {
-	if (twlBlowfish || ndsHeader->unitCode == 0) return;
+	if (twlBlowfish || (!ROMsupportsDsiMode(ndsHeader))) return;
 
 	// Used for dumping the DSi arm9i/7i binaries
 
@@ -432,7 +436,7 @@ void fullHeaderRead(sNDSHeaderExt* ndsHeader, u32* chipID, bool* chip_read) {
 	tonccpy(ndsHeader, headerData, 0x200);
 
 	// Maybe this should also check if the console is a DSi...
-	if((ndsHeader->unitCode != 0) || (ndsHeader->dsi_flags != 0)) {
+	if(ROMsupportsDsiMode(ndsHeader) || (ndsHeader->dsi_flags != 0)) {
 		// Extended header found
 		// Read Chip ID to understand how to read the header. 
 		doChipIDRead(chipID, chip_read);
@@ -626,7 +630,7 @@ void cardReadBlock(u32 src, u8* dest)
 		// Read data from secure area
 		tonccpy (dest, (u8*)secureArea + src - CARD_SECURE_AREA_OFFSET, 0x200);
 		return;
-	} else if (ndsHeader->unitCode != 0) {
+	} else if (ROMsupportsDsiMode(ndsHeader)) {
 		size_t twl_rom_region_start = 0;
 		if(ndsHeader->twl_rom_region_start != 0)
 			twl_rom_region_start = (ndsHeader->twl_rom_region_start * SINGLE_ROM_REGION_SIZE) + TWL_BLOWFISH_TABLE_SIZE;

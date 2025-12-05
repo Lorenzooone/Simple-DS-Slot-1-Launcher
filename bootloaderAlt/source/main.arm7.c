@@ -68,6 +68,7 @@ extern u32 twlMode;
 extern u32 twlClock;
 extern u32 twlTouch;
 extern u32 soundFreq;
+extern u32 sleepMode;
 extern u32 runCardEngine;
 
 extern bool arm9_runCardEngine;
@@ -87,42 +88,25 @@ extern void arm7_clearmem (void* loc, size_t len);
 extern __attribute__((noreturn)) void arm7_actual_jump(void* fn);
 extern void ensureBinaryDecompressed(const tNDSHeader* ndsHeader, module_params_t* moduleParams);
 
-static const u32 cheatDataEndSignature[2] = {0xCF000000, 0x00000000};
+#define NUM_ELEMS(array) (sizeof(array) / sizeof(array[0]))
+
+#define CHEAT_DATA_END_SIGNATURE_FIRST 0xCF000000
+
+static const u32 cheatDataEndSignature[2] = {CHEAT_DATA_END_SIGNATURE_FIRST, 0x00000000};
 
 #define MODULE_PARAMS_PERSONAL_SIZE 3
 #define MODULE_PARAMS_SIGNATURE_SIZE 2
 // Module params - Add start to avoid being mistaken for using old SDK version
 static const u32 moduleParamsPersonal[MODULE_PARAMS_PERSONAL_SIZE] = {0x0503757C, 0xDEC00621, 0x2106C0DE};
-static module_params_t emulatedModuleParams; 
+static module_params_t emulatedModuleParams;
 
-u32* findModuleParamsOffset(const tNDSHeader* ndsHeader) {
-	//dbg_printf("findModuleParamsOffset:\n");
-
-	u32* moduleParamsOffset = findOffset(
-			(u32*)ndsHeader->arm9destination, ndsHeader->arm9binarySize,
-			moduleParamsPersonal + (MODULE_PARAMS_PERSONAL_SIZE - MODULE_PARAMS_SIGNATURE_SIZE), MODULE_PARAMS_SIGNATURE_SIZE 
-		);
-
-	// Return NULL if nothing is found
-	if(moduleParamsOffset == NULL) {
-		if (memcmp(ndsHeader->gameCode, "AS2E", 4) == 0) // Spider-Man 2 (USA)
-		{
-			emulatedModuleParams.sdk_version = LAST_NON_SDK5_VERSION;
-			return (u32*)&emulatedModuleParams;
-		}
-
-		return NULL;
-	}
-
-	uintptr_t subtract_value = sizeof(module_params_t) - (sizeof(u32) * MODULE_PARAMS_SIGNATURE_SIZE);
-	uintptr_t base_ptr = (uintptr_t)moduleParamsOffset;
-
-	// This would be a really weird case. Return NULL
-	if(base_ptr < subtract_value)
-		return NULL;
-
-	return (u32*)(base_ptr - subtract_value);
-}
+#define SLEEP_INPUT_WRITE_END_SIG_SIZE 2
+#define SLEEP_INPUT_WRITE_END_SIG_SDK_POS 1
+// Sleep input write
+static const u32 sleepInputWriteEndSignatureEndBase[SLEEP_INPUT_WRITE_END_SIG_SIZE] = {0x04000136, 0xFA8};
+static const u32 sleepInputWriteSignature[1] = {0x13A04902}; // movne r4, 0x8000
+static const u32 sleepInputWriteSignature2[1] = {0x11A05004}; // movne r5, r4
+static const u16 sleepInputWriteBeqSignatureThumb[1] = {0xD000};
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // Important things
@@ -130,6 +114,9 @@ u32* findModuleParamsOffset(const tNDSHeader* ndsHeader) {
 tNDSHeader* ndsHeader = (tNDSHeader*)NDS_HEAD;
 
 #define ENGINE_LOCATION_ARM7  	0x037C0000
+
+#define DSI_INFO_BASE_ADDR		0x027FF000
+#define DSI_INFO_BASE_ADDR_SDK5	0x02FFF000
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // Used for debugging purposes
@@ -155,6 +142,116 @@ static void debugOutput (u32 code) {
 	arm9_stateFlag = ARM9_DISPERR;
 	// Wait for completion
 	while (arm9_stateFlag != ARM9_READY);
+}
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// Game information
+
+// Implicit SDK 5
+static bool ROMsupportsDsiMode(const tNDSHeader* ndsHeader) {
+	return (ndsHeader->unitCode > 0);
+}
+
+u32* findModuleParamsOffset(const tNDSHeader* ndsHeader) {
+	//dbg_printf("findModuleParamsOffset:\n");
+
+	u32* moduleParamsOffset = findOffset(
+			(u32*)ndsHeader->arm9destination, ndsHeader->arm9binarySize,
+			moduleParamsPersonal + (MODULE_PARAMS_PERSONAL_SIZE - MODULE_PARAMS_SIGNATURE_SIZE), MODULE_PARAMS_SIGNATURE_SIZE 
+		);
+
+	// Return NULL if nothing is found
+	if(moduleParamsOffset == NULL) {
+		if (memcmp(ndsHeader->gameCode, "AS2E", 4) == 0) // Spider-Man 2 (USA)
+		{
+			emulatedModuleParams.sdk_version = LAST_NON_SDK5_VERSION;
+			return (u32*)&emulatedModuleParams;
+		}
+		// This ROM is implicitly SDK5, as DSi support needs >= SDK5...
+		if(ROMsupportsDsiMode(ndsHeader)) {
+			emulatedModuleParams.sdk_version = FIRST_SDK5_VERSION;
+			return (u32*)&emulatedModuleParams;
+		}
+
+		return NULL;
+	}
+
+	uintptr_t subtract_value = sizeof(module_params_t) - (sizeof(u32) * MODULE_PARAMS_SIGNATURE_SIZE);
+	uintptr_t base_ptr = (uintptr_t)moduleParamsOffset;
+
+	// This would be a really weird case. Return NULL
+	if(base_ptr < subtract_value)
+		return NULL;
+
+	return (u32*)(base_ptr - subtract_value);
+}
+
+void* findSleepInputWriteOffset(const tNDSHeader* ndsHeader, bool* isArm) {
+	const module_params_t* moduleParams = (const module_params_t*)findModuleParamsOffset(ndsHeader);
+
+	// dbg_printf("findSleepInputWriteOffset:\n");
+	u32 own_sleep_signature[SLEEP_INPUT_WRITE_END_SIG_SIZE] = {0};
+
+	for(int i = 0; i < SLEEP_INPUT_WRITE_END_SIG_SIZE; i++)
+		own_sleep_signature[i] = sleepInputWriteEndSignatureEndBase[i];
+	own_sleep_signature[SLEEP_INPUT_WRITE_END_SIG_SDK_POS] += isSdk5(moduleParams) ? DSI_INFO_BASE_ADDR_SDK5 : DSI_INFO_BASE_ADDR;
+
+	u32* endOffset = findOffset(
+		(u32*)ndsHeader->arm7destination, ndsHeader->arm7binarySize,
+		own_sleep_signature, NUM_ELEMS(own_sleep_signature)
+	);
+
+	if(!endOffset)
+		return NULL;
+
+	u32* armOffset = findOffsetBackwards(
+		endOffset, 0x38,
+		sleepInputWriteSignature, NUM_ELEMS(sleepInputWriteSignature)
+	);
+	if(armOffset) {
+		*isArm = true;
+		return armOffset;
+	}
+
+	armOffset = findOffsetBackwards(
+		endOffset, 0x3C,
+		sleepInputWriteSignature2, NUM_ELEMS(sleepInputWriteSignature2)
+	);
+	if(armOffset) {
+		*isArm = true;
+		return armOffset;
+	}
+
+	u16* thumbOffset = (u16*)findOffsetBackwardsThumb(
+		(u16*)endOffset, 0x30,
+		sleepInputWriteBeqSignatureThumb, NUM_ELEMS(sleepInputWriteBeqSignatureThumb)
+	);
+	if(thumbOffset) {
+		*isArm = false;
+		return thumbOffset + 1;
+	}
+
+	return NULL;
+}
+
+static void patchSleepInputWrite(const tNDSHeader* ndsHeader) {
+	if (sleepMode) {
+		return;
+	}
+
+	bool isArm = true;
+	u32* offset = (u32*)findSleepInputWriteOffset(ndsHeader, &isArm);
+	if (!offset) {
+		return;
+	}
+
+	if(isArm) {
+		*offset = 0xE1A00000; // nop
+	} else {
+		u16* offsetThumb = (u16*)offset;
+		*offsetThumb = 0x46C0; // nop
+	}
+
 }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -654,6 +751,8 @@ void arm7_main (void) {
 		}
 	//}
 
+	patchSleepInputWrite(ndsHeader);
+
 	if (memcmp((char*)NDS_HEAD+0xC, "NTR", 3) == 0		// Download Play ROMs
 	 || memcmp((char*)NDS_HEAD+0xC, "ASM", 3) == 0		// Super Mario 64 DS
 	 || memcmp((char*)NDS_HEAD+0xC, "AMC", 3) == 0		// Mario Kart DS
@@ -666,6 +765,7 @@ void arm7_main (void) {
 		gameSoftReset = true;
 	}
 
+	u32* cheatDataPos = (u32*)0x023F0000;
 	if (runCardEngine) {
 		// WRAM-A mapped to the 0x37C0000 - 0x37FFFFF area : 256k
 		REG_MBK6=0x080037C0;
@@ -678,17 +778,17 @@ void arm7_main (void) {
 			nocashMessage("error during card hook");
 			debugOutput(errorCode);
 		}
-		if (*(u32*)(0x023F0000) != 0xCF000000) {
+		if (cheatDataPos[0] != CHEAT_DATA_END_SIGNATURE_FIRST) {
 			u32* cheatDataOffset = findOffset(
 				(u32*)ENGINE_LOCATION_ARM7, cardengine_arm7_bin_size,
 				cheatDataEndSignature, 2
 			);
 			if (cheatDataOffset) {
-				copyLoop (cheatDataOffset, (u32*)0x023F0000, 0x8000);	// Copy cheat data
+				copyLoop (cheatDataOffset, cheatDataPos, 0x8000);	// Copy cheat data
 			}
 		}
 	}
-	arm7_clearmem ((void*)0x023F0000, 0x8000);		// Clear cheat data from main memory
+	arm7_clearmem(cheatDataPos, 0x8000);		// Clear cheat data from main memory
 
 	debugOutput (ERR_STS_START);
 

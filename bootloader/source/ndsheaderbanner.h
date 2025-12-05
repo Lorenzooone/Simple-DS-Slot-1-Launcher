@@ -123,17 +123,27 @@ typedef struct {
 
 	// 0x200
 	// TODO: More DSi-specific fields.
-	u32 dsi1[0x10/4];
+	u32 dsi1[0x10/ sizeof(u32)];
 	u32 twlRomSize;
 	u32 dsi_unk3;
-	u32 dsi_unk4;
-	u32 dsi_unk5;
-	u8 dsi2[0x10];
-	u32 dsi_tid;
-	u32 dsi_tid2;
+	u32 arm9i_param_table_offset;
+	u32 arm7i_param_table_offset;
+	u32 arm9i_modcrypt_offset;
+	u32 arm9i_modcrypt_size;
+	u32 arm7i_modcrypt_offset;
+	u32 arm7i_modcrypt_size;
+	char emagCode[4];
+	u32 dsi_title_type;
 	u32 pubSavSize;
 	u32 prvSavSize;
-	u8 dsi3[0x174];
+	u8 dsi2[0xC0];
+	u8 sha1_hmac_hash_arm9_enc_sec_area[20];
+	u8 sha1_hmac_hash_arm7[20];
+	u8 sha1_hmac_hash_digest_master[20];
+	u8 sha1_hmac_hash_icon_title[20];
+	u8 sha1_hmac_hash_arm9i_dec[20];
+	u8 sha1_hmac_hash_arm7i_dec[20];
+	u8 dsi3[0x3C];
 } sNDSHeaderExt;
 
 //#define __NDSHeader ((tNDSHeader *)0x02FFFE00)
