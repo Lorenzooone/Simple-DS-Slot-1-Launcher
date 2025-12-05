@@ -16,12 +16,14 @@
 .global saveSize
 .global language
 .global gameSoftReset
+.global cheat_data_offset
 
 #define ICACHE_SIZE	0x2000
 #define DCACHE_SIZE	0x1000
 #define CACHE_LINE_SIZE	32
 
-
+copy_offset:
+	.word copy_offset
 patches_offset:
 	.word	patches
 intr_vblank_orig_return:
@@ -31,7 +33,7 @@ language:
 gameSoftReset:
 	.word	0x00000000
 cheat_data_offset:    
-	.word	cheat_data
+	.word	0x00000000
 
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 

@@ -607,6 +607,11 @@ static std::string get_base_title_nand_path(const char* app_filepath) {
 	return std::string(app_filepath, second_last_pos_sep + 1);
 }
 
+static void clean_cheat_data(uintptr_t cheat_data_address) {
+	memset((void*)cheat_data_address, 0, 0x8000);
+	*((u32*)cheat_data_address) = 0xCF000000;
+}
+
 int main(int argc, char **argv) {
 	fifoSendValue32(FIFO_PM, PM_REQ_SLEEP_DISABLE);
 
@@ -614,7 +619,7 @@ int main(int argc, char **argv) {
 	uint16_t debugger_type = 0;
 
 	// Reset cheat data, since we won't be using it regardless...
-	memset((void*)0x023F0000, 0, 0x8000);
+	clean_cheat_data(0x023F0000);
 	u32 curr_keys = 0;
 	do {
 		swiWaitForVBlank();

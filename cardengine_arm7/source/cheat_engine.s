@@ -22,9 +22,7 @@
 
 .global cheat_engine_end
 @.global intr_orig_return_offset
-.global cheat_data
 .global cheat_engine_size
-
 
 cheat_engine_size:
 	.word	cheat_engine_end - cheat_engine_start
@@ -57,7 +55,8 @@ code_handler_start:
 @	0xCF000000 0x00000000 indicates the end of the code list
 @	r12 points to the next code to load
 	
-	adr		r12,	cheat_data
+	ldr		r12, =#cheat_data_offset
+	ldr		r12, [r12, #0]
 	
 main_loop:
 	ldmia	r12!,	{r10, r11}		@ load a code
@@ -470,14 +469,5 @@ exit:
 @	.word	0x00000000
 .pool
 
-cheat_data:
-
 cheat_engine_end:
-
-@ Cheat data goes here
-
-.word 0xCF000000
-    
-.space 32768
-
 

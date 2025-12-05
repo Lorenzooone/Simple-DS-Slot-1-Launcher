@@ -21,7 +21,6 @@
 
 #include "hook.h"
 #include "common.h"
-#include "cardengine_arm7_bin.h"
 
 extern unsigned long language;
 extern bool gameSoftReset;
@@ -98,7 +97,7 @@ static u32* hookInterruptHandler (u32* addr, size_t size) {
 }
 
 
-int hookNdsRetail (const tNDSHeader* ndsHeader, u32* cardEngineLocation) {
+int hookNdsRetail (const tNDSHeader* ndsHeader, u32* cardEngineLocation, u32* cheatDataPos) {
 	u32* hookLocation = hookInterruptHandler((u32*)ndsHeader->arm7destination, ndsHeader->arm7binarySize);
 
 	// SDK 5
@@ -181,11 +180,12 @@ int hookNdsRetail (const tNDSHeader* ndsHeader, u32* cardEngineLocation) {
 
 	u32* vblankHandler = hookLocation;
 
-	cardEngineLocation[1] = *vblankHandler;
-	cardEngineLocation[2] = language;
-	cardEngineLocation[3] = gameSoftReset;
+	cardEngineLocation[2] = *vblankHandler;
+	cardEngineLocation[3] = language;
+	cardEngineLocation[4] = gameSoftReset;
+	cardEngineLocation[5] = (u32)cheatDataPos;
 
-	u32* patches =  (u32*) cardEngineLocation[0];
+	u32* patches =  (u32*) cardEngineLocation[1];
 
 	*vblankHandler = patches[0];
 

@@ -88,11 +88,11 @@ extern volatile uint32_t data_saved[4];
 extern void arm7_clearmem (void* loc, size_t len);
 extern __attribute__((noreturn)) void arm7_actual_jump(void* fn);
 
+#define CHEAT_DATA_SIZE 0x8000
+
 #define NUM_ELEMS(array) (sizeof(array) / sizeof(array[0]))
 
 #define CHEAT_DATA_END_SIGNATURE_FIRST 0xCF000000
-
-static const u32 cheatDataEndSignature[2] = {CHEAT_DATA_END_SIGNATURE_FIRST, 0x00000000};
 
 #define MODULE_PARAMS_PERSONAL_SIZE 3
 #define MODULE_PARAMS_SIGNATURE_SIZE 2
@@ -140,6 +140,15 @@ static void errorOutput (u32 code) {
 	arm9_stateFlag = ARM9_DISPERR;
 	// Stop
 	while (1);
+}
+*/
+
+/*
+static void showAddress(uintptr_t address) {
+	while(arm9_stateFlag != ARM9_READY);
+	arm9_addressToShow = address;
+	arm9_stateFlag = ARM9_PRINT_MEM;
+	while (arm9_stateFlag != ARM9_READY);
 }
 */
 
@@ -429,7 +438,7 @@ void arm7_resetMemory (void)
 		memset_addrs_arm7(0x03000000, 0x0380FFC0);
 		memset_addrs_arm7(0x0380FFD0, 0x03800000 + 0x10000);
 	} else {
-		memset_addrs_arm7(0x03800000 - 0x8000, 0x03800000 + 0x10000);
+		memset_addrs_arm7(0x03800000 - CHEAT_DATA_SIZE, 0x03800000 + 0x10000);
 	}
 
 	// clear most of EXRAM - except before 0x023F0000, which has the cheat data
@@ -437,7 +446,7 @@ void arm7_resetMemory (void)
 	memset_addrs_arm7(0x023DB000, 0x023F0000);
 
 	// clear more of EXRAM, skipping the cheat data section
-	toncset ((void*)0x023F8000, 0, 0x8000);
+	toncset ((void*)0x023F8000, 0, 0x10000 - CHEAT_DATA_SIZE);
 
 	if(isDSiMode() || swiIsDebugger())
 		memset_addrs_arm7(0x02400000, 0x02800000); // Clear the rest of EXRAM
@@ -1143,30 +1152,35 @@ void arm7_main (void) {
 		runCardEngine = false;
 	}
 
-	u32* cheatDataPos = (u32*)0x023F0000;
+	// Does not currently work for DSi games launched in DSi mode
+	if(dsiModeConfirmed && ROMsupportsDsiMode(ndsHeader)) {
+		runCardEngine = false;
+	}
+
+	u32* cheatDataBasePos = (u32*)0x023F0000;
 	if (runCardEngine) {
 		// WRAM-A mapped to the 0x37C0000 - 0x37FFFFF area : 256k
 		REG_MBK6=0x080037C0;
 
-		copyLoop ((u32*)ENGINE_LOCATION_ARM7, (u32*)cardengine_arm7_bin, cardengine_arm7_bin_size);
-		errorCode = hookNdsRetail(ndsHeader, (u32*)ENGINE_LOCATION_ARM7);
+		u32* cardEnginePos = *((u32**)cardengine_arm7_bin);
+		u32* cheatDataPos = (u32*)ENGINE_LOCATION_ARM7;
+
+		copyLoop(cardEnginePos, (u32*)cardengine_arm7_bin, cardengine_arm7_bin_size);
+		toncset(cheatDataPos, 0, CHEAT_DATA_SIZE); // Zero out cheat data
+		cheatDataPos[0] = CHEAT_DATA_END_SIGNATURE_FIRST;
+		cheatDataPos[CHEAT_DATA_SIZE / sizeof(cheatDataPos[0])] = CHEAT_DATA_END_SIGNATURE_FIRST;
+
+		errorCode = hookNdsRetail(ndsHeader, cardEnginePos, cheatDataPos);
 		if (errorCode == ERR_NONE) {
 			nocashMessage("card hook Sucessfull");
 		} else {
 			nocashMessage("error during card hook");
 			debugOutput(errorCode);
 		}
-		if (cheatDataPos[0] != CHEAT_DATA_END_SIGNATURE_FIRST) {
-			u32* cheatDataOffset = findOffset(
-				(u32*)ENGINE_LOCATION_ARM7, cardengine_arm7_bin_size,
-				cheatDataEndSignature, 2
-			);
-			if (cheatDataOffset) {
-				tonccpy (cheatDataOffset, cheatDataPos, 0x8000);	// Copy cheat data
-			}
-		}
+		if((errorCode == ERR_NONE) && (cheatDataBasePos[0] != CHEAT_DATA_END_SIGNATURE_FIRST))
+			tonccpy(cheatDataPos, cheatDataBasePos, CHEAT_DATA_SIZE); // Copy cheat data
 	}
-	toncset(cheatDataPos, 0, 0x8000);		// Clear cheat data from main memory
+	toncset(cheatDataBasePos, 0, CHEAT_DATA_SIZE); // Clear cheat data from main memory
 
 	//debugOutput (ERR_STS_START);
 

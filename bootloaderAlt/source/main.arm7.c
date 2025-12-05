@@ -88,11 +88,11 @@ extern void arm7_clearmem (void* loc, size_t len);
 extern __attribute__((noreturn)) void arm7_actual_jump(void* fn);
 extern void ensureBinaryDecompressed(const tNDSHeader* ndsHeader, module_params_t* moduleParams);
 
+#define CHEAT_DATA_SIZE 0x8000
+
 #define NUM_ELEMS(array) (sizeof(array) / sizeof(array[0]))
 
 #define CHEAT_DATA_END_SIGNATURE_FIRST 0xCF000000
-
-static const u32 cheatDataEndSignature[2] = {CHEAT_DATA_END_SIGNATURE_FIRST, 0x00000000};
 
 #define MODULE_PARAMS_PERSONAL_SIZE 3
 #define MODULE_PARAMS_SIGNATURE_SIZE 2
@@ -765,30 +765,30 @@ void arm7_main (void) {
 		gameSoftReset = true;
 	}
 
-	u32* cheatDataPos = (u32*)0x023F0000;
+	u32* cheatDataBasePos = (u32*)0x023F0000;
 	if (runCardEngine) {
 		// WRAM-A mapped to the 0x37C0000 - 0x37FFFFF area : 256k
 		REG_MBK6=0x080037C0;
 
-		copyLoop ((u32*)ENGINE_LOCATION_ARM7, (u32*)cardengine_arm7_bin, cardengine_arm7_bin_size);
-		errorCode = hookNdsRetail(ndsHeader, (u32*)ENGINE_LOCATION_ARM7);
-		if (errorCode == ERR_NONE) {
+		u32* cardEnginePos = *((u32**)cardengine_arm7_bin);
+		u32* cheatDataPos = (u32*)ENGINE_LOCATION_ARM7;
+
+		copyLoop(cardEnginePos, (u32*)cardengine_arm7_bin, cardengine_arm7_bin_size);
+		arm7_clearmem(cheatDataPos, CHEAT_DATA_SIZE); // Clear cheat data from main memory
+		cheatDataPos[0] = CHEAT_DATA_END_SIGNATURE_FIRST;
+		cheatDataPos[CHEAT_DATA_SIZE / sizeof(cheatDataPos[0])] = CHEAT_DATA_END_SIGNATURE_FIRST;
+
+		errorCode = hookNdsRetail(ndsHeader, cardEnginePos, cheatDataPos);
+		if (errorCode == ERR_NONE)
 			nocashMessage("card hook Sucessfull");
-		} else {
+		else {
 			nocashMessage("error during card hook");
 			debugOutput(errorCode);
 		}
-		if (cheatDataPos[0] != CHEAT_DATA_END_SIGNATURE_FIRST) {
-			u32* cheatDataOffset = findOffset(
-				(u32*)ENGINE_LOCATION_ARM7, cardengine_arm7_bin_size,
-				cheatDataEndSignature, 2
-			);
-			if (cheatDataOffset) {
-				copyLoop (cheatDataOffset, cheatDataPos, 0x8000);	// Copy cheat data
-			}
-		}
+		if((errorCode == ERR_NONE) && (cheatDataBasePos[0] != CHEAT_DATA_END_SIGNATURE_FIRST))
+			copyLoop(cheatDataPos, cheatDataBasePos, CHEAT_DATA_SIZE); // Copy cheat data
 	}
-	arm7_clearmem(cheatDataPos, 0x8000);		// Clear cheat data from main memory
+	arm7_clearmem(cheatDataBasePos, CHEAT_DATA_SIZE); // Clear cheat data from main memory
 
 	debugOutput (ERR_STS_START);
 

@@ -68,6 +68,7 @@ extern volatile bool arm9_runCardEngine;
 extern volatile int arm9_stateFlag;
 extern volatile u32 arm9_errorCode;
 extern volatile bool arm9_errorClearBG;
+extern volatile uintptr_t arm9_addressToShow;
 
 static inline void dmaFill(const void* src, void* dest, uint32 size) {
 	DMA_SRC(3)  = (uint32)src;

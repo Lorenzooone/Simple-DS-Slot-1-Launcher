@@ -69,6 +69,7 @@ volatile int arm9_stateFlag = ARM9_BOOT;
 volatile u32 arm9_errorCode = 0;
 volatile bool arm9_errorClearBG = false;
 volatile u32 arm9_BLANK_RAM = 0;
+volatile uintptr_t arm9_addressToShow = 0;
 
 // For debugging
 volatile uint32_t data_saved[4];
@@ -134,6 +135,7 @@ Red = 00, Yellow = 01, Green = 10, Blue = 11
 
 Written by Chishm
 --------------------------------------------------------------------------*/
+/*
 static void arm9_errorOutput (u32 code, bool clearBG) {
 // Re-enable for debugging
 	int i, j, k;
@@ -210,6 +212,7 @@ static void arm9_errorOutput (u32 code, bool clearBG) {
 		}
 	}		
 }
+*/
 
 static void ux_to_screen(volatile uint16_t* vram_map, uint32_t value, size_t num_displayed_bytes) {
 	size_t num_nybbles = 2 * num_displayed_bytes;
@@ -254,6 +257,7 @@ void memory_view_to_screen(uint8_t* address) {
 			u8_to_screen(&vram_target_map[(i * (SCREEN_WIDTH >> 3)) + start + (j * 3)], address[(single_iter_shown * i) + j]);
 	}
 
+	while(!(REG_KEYINPUT & KEY_A));
 	while(REG_KEYINPUT & KEY_A);
 	for(int i = 0; i < (SCREEN_HEIGHT >> 3) * (SCREEN_WIDTH >> 3); i++)
 		vram_target_map[i] = 0;
@@ -362,10 +366,8 @@ void __attribute__((target("arm"))) arm9_main (void) {
 	while (arm9_stateFlag != ARM9_BOOTBIN) {
 		if (arm9_stateFlag == ARM9_DISPERR) {
 			// Re-enable for debugging
-			arm9_errorOutput (arm9_errorCode, arm9_errorClearBG);
-			if (arm9_stateFlag == ARM9_DISPERR) {
-				arm9_stateFlag = ARM9_READY;
-			}
+			//arm9_errorOutput (arm9_errorCode, arm9_errorClearBG);
+			arm9_stateFlag = ARM9_READY;
 		}
 		if (arm9_stateFlag == ARM9_SETSCFG) {
 			if(arm9_dsimode) {
@@ -399,7 +401,7 @@ void __attribute__((target("arm"))) arm9_main (void) {
 			arm9_stateFlag = ARM9_READY;
 		}
 		if(arm9_stateFlag == ARM9_PRINT_MEM) {
-			memory_view_to_screen((uint8_t*)0x2003FC0);
+			memory_view_to_screen((uint8_t*)arm9_addressToShow);
 			arm9_stateFlag = ARM9_READY;
 		}
 		arm9_flush_cache();

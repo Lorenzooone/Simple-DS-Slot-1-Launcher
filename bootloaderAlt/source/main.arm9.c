@@ -274,9 +274,7 @@ void arm9_main (void) {
 		if (arm9_stateFlag == ARM9_DISPERR) {
 			// Re-enable for debugging
 			//arm9_errorOutput (arm9_errorCode, arm9_errorClearBG);
-			if (arm9_stateFlag == ARM9_DISPERR) {
-				arm9_stateFlag = ARM9_READY;
-			}
+			arm9_stateFlag = ARM9_READY;
 		}
 	}
 	
