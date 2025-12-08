@@ -55,7 +55,7 @@ endif
 # Source code paths
 # -----------------
 
-SOURCEDIRS	:= source common ../common/source/tonccpy
+SOURCEDIRS	:= source common ../common/source/
 INCLUDEDIRS	:= source common ../common/include $(BUILDDIR)
 BINDIRS		:= ../data
 

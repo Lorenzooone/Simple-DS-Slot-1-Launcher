@@ -22,11 +22,7 @@
 #include "hook.h"
 #include "common.h"
 
-extern unsigned long language;
-extern bool gameSoftReset;
-
-extern unsigned long cheat_engine_size;
-extern unsigned long intr_orig_return_offset;
+#include "cardengine_defs.h"
 
 static const u32 handlerStartSig[5] = {
 	0xe92d4000, 	// push {lr}
@@ -97,7 +93,7 @@ static u32* hookInterruptHandler (u32* addr, size_t size) {
 }
 
 
-int hookNdsRetail (const tNDSHeader* ndsHeader, u32* cardEngineLocation, u32* cheatDataPos) {
+int hookNdsRetail(const tNDSHeader* ndsHeader, u32* cardEngineLocation, u32* cheatDataPos, bool gameSoftReset, uint32_t language, uint32_t redirectPowerButton) {
 	u32* hookLocation = hookInterruptHandler((u32*)ndsHeader->arm7destination, ndsHeader->arm7binarySize);
 
 	// SDK 5
@@ -180,12 +176,14 @@ int hookNdsRetail (const tNDSHeader* ndsHeader, u32* cardEngineLocation, u32* ch
 
 	u32* vblankHandler = hookLocation;
 
-	cardEngineLocation[2] = *vblankHandler;
-	cardEngineLocation[3] = language;
-	cardEngineLocation[4] = gameSoftReset;
-	cardEngineLocation[5] = (u32)cheatDataPos;
+	struct cardengine_main_data_t* target_cardengine_data = (struct cardengine_main_data_t*)cardEngineLocation;
+	target_cardengine_data->intr_vblank_orig_return = *vblankHandler;
+	target_cardengine_data->language = language;
+	target_cardengine_data->gameSoftReset = gameSoftReset;
+	target_cardengine_data->cheat_data_offset = (u32)cheatDataPos;
+	target_cardengine_data->read_power_button = redirectPowerButton;
 
-	u32* patches =  (u32*) cardEngineLocation[1];
+	u32* patches = (u32*)target_cardengine_data->patches_offset;
 
 	*vblankHandler = patches[0];
 

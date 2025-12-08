@@ -24,87 +24,68 @@
 #include <nds/arm7/audio.h>
 
 #include <string.h>
+#include "cardengine_defs.h"
+#include "reset_to_loader.h"
 #include "cardEngine.h"
 #include "i2c.h"
 
-#include "sr_data_error.h"	// For showing an error screen
-#include "sr_data_srloader.h"	// For rebooting into TWiLight Menu++
-#include "sr_data_srllastran.h"	// For rebooting the game
-
-static const char *unlaunchAutoLoadID = "AutoLoadInfo";
-static const char bootNdsPath[15] = "sdmc:/boot.nds";
-static const char resetGameSrldrPath[40] = "sdmc:/_nds/TWiLightMenu/main.srldr";
-
 extern void cheat_engine_start(void);
 
-extern u32 language;
-extern u32 gameSoftReset;
-static int softResetTimer = 0;
+extern u32 copy_offset;
+extern u8 reset_data;
+extern u8 boot_path;
 
-static void unlaunchSetFilename(bool boot) {
-	memcpy((u8*)0x02000800, unlaunchAutoLoadID, 12);
-	*(u16*)(0x0200080C) = 0x3F0;		// Unlaunch Length for CRC16 (fixed, must be 3F0h)
-	*(u16*)(0x0200080E) = 0;			// Unlaunch CRC16 (empty)
-	*(u32*)(0x02000810) = (BIT(0) | BIT(1));		// Load the title at 2000838h
-													// Use colors 2000814h
-	*(u16*)(0x02000814) = 0x7FFF;		// Unlaunch Upper screen BG color (0..7FFFh)
-	*(u16*)(0x02000816) = 0x7FFF;		// Unlaunch Lower screen BG color (0..7FFFh)
-	memset((u8*)0x02000818, 0, 0x20+0x208+0x1C0);		// Unlaunch Reserved (zero)
-	if (boot) {
-		for (unsigned int i = 0; i < sizeof(bootNdsPath)/sizeof(bootNdsPath[0]); i++) {
-			((u16*)0x02000838)[i] = bootNdsPath[i];		// Unlaunch Device:/Path/Filename.ext (16bit Unicode,end by 0000h)
-		}
-	} else {
-		for (unsigned int i = 0; i < sizeof(resetGameSrldrPath)/sizeof(resetGameSrldrPath[0]); i++) {
-			((u16*)0x02000838)[i] = resetGameSrldrPath[i];		// Unlaunch Device:/Path/Filename.ext (16bit Unicode,end by 0000h)
-		}
-	}
-	while (*(u16*)(0x0200080E) == 0) {	// Keep running, so that CRC16 isn't 0
-		*(u16*)(0x0200080E) = swiCRC16(0xFFFF, (void*)0x02000810, 0x3F0);		// Unlaunch CRC16
-	}
-}
+struct cardengine_main_data_t* cardengine_main_data = (struct cardengine_main_data_t*)&copy_offset;
+
+#ifdef DO_DSI
+static int powerOffTimer = 0;
+#endif
 
 void myIrqHandlerVBlank(void) {
-	if (language >= 0 && language <= 7) {
+
+	if (cardengine_main_data->language >= 0 && cardengine_main_data->language <= 7) {
 		// Change language
-		*(u8*)(0x027FFCE4) = language;
+		*(u8*)(0x027FFCE4) = cardengine_main_data->language;
 	}
 
-	if (0 == (REG_KEYINPUT & (KEY_L | KEY_R | KEY_DOWN | KEY_B))) {
-		if (softResetTimer == 60*2) {
-			REG_MASTER_VOLUME = 0;
-			int oldIME = enterCriticalSection();
-			memset((u32*)0x02000000, 0, 0x400);
-			unlaunchSetFilename(true);
-			memcpy((u32*)0x02000300, sr_data_srloader, 0x20);
-			i2cWriteRegister(0x4a,0x70,0x01);
-			i2cWriteRegister(0x4a,0x11,0x01);	// Reboot into TWiLight Menu++
-			leaveCriticalSection(oldIME);
-		}
-		softResetTimer++;
-	} else {
-		softResetTimer = 0;
+	#ifdef DO_DSI
+	bool wants_soft_reset = (0 == (REG_KEYINPUT & (KEY_L | KEY_R | KEY_START | KEY_SELECT))) && !cardengine_main_data->gameSoftReset;
+	// The GBATek docs for this are wrong... :/
+	uint8_t power_press_kind = cardengine_main_data->read_power_button ? i2cReadRegister(0x4a, 0x10) : 0;
+	bool start_power_press = power_press_kind & 8;
+	bool released_power = power_press_kind & 1;
+	if(start_power_press || powerOffTimer)
+		powerOffTimer++;
+	if(released_power)
+		powerOffTimer = 0;
+
+	if(powerOffTimer >= 60) {
+		//systemShutDown();
+		// If here, the shutdown failed...
+		// Still, try resetting...
+		released_power = true;
 	}
 
-	if ((0 == (REG_KEYINPUT & (KEY_L | KEY_R | KEY_START | KEY_SELECT))) && !gameSoftReset) {
+	wants_soft_reset = wants_soft_reset || released_power;
+	if(wants_soft_reset) {
 		REG_MASTER_VOLUME = 0;
 		int oldIME = enterCriticalSection();
-		unlaunchSetFilename(false);
-		memset((u32*)0x02000000, 0, 0x400);
-		*(u32*)(0x02000000) = BIT(3);
-		memcpy((u32*)0x02000300, sr_data_srllastran, 0x20);
+		setRebootParams(cardengine_main_data, &boot_path, &reset_data);
 		i2cWriteRegister(0x4a,0x70,0x01);
 		i2cWriteRegister(0x4a,0x11,0x01);	// Reboot game
 		leaveCriticalSection(oldIME);
+		// From blocksds code, 20 ms
+		swiDelay(20 * 0x20BA);
 	}
 
 	if (REG_IE & IRQ_NETWORK) {
 		REG_IE &= ~IRQ_NETWORK; // DSi RTC fix
 	}
+	#endif
 
 	#ifdef DEBUG
 	nocashMessage("cheat_engine_start\n");
-	#endif	
+	#endif
 	
 	cheat_engine_start();
 }

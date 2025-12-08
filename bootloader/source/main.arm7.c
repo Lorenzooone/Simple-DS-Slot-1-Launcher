@@ -37,6 +37,7 @@
 #include <nds/dma.h>
 #include <nds/arm7/audio.h>
 #include <nds/ipc.h>
+#include <nds/arm7/i2c.h>
 #include <string.h>
 
 // #include <nds/registers_alt.h>
@@ -53,34 +54,28 @@
 #include "tonccpy.h"
 #include "read_card.h"
 #include "module_params.h"
-#include "cardengine_arm7_bin.h"
 #include "hook.h"
 #include "find.h"
 #include "debug_payloads.h"
+#include "restart_self.h"
 
 #include "gm9i/crypto.h"
 #include "gm9i/f_xy.h"
 #include "twltool/dsi.h"
 #include "u128_math.h"
 
+#include "bootloader_defs.h"
+#include "cardengine_defs.h"
+#include "reset_to_loader.h"
+
 // Internal libnds value for isDSiMode
 extern bool __dsimode;
-extern u32 dsiMode;
-extern u32 language;
-extern u32 sdAccess;
-extern u32 scfgUnlock;
-extern u32 twlMode;
-extern u32 twlClock;
-extern u32 boostVram;
-extern u32 twlTouch;
-extern u32 soundFreq;
-extern u32 runCardEngine;
-extern u32 sleepMode;
+extern u32 _start;
+
+struct bootloader_main_data_t* bootloader_data = (struct bootloader_main_data_t*)&_start;
 
 bool useTwlCfg = false;
 int twlCfgLang = 0;
-
-bool gameSoftReset = false;
 
 // For debugging
 extern volatile uint32_t data_saved[4];
@@ -122,8 +117,6 @@ static module_params_t* moduleParams;
 
 #define DSI_HEADER         0x027FE000
 #define DSI_HEADER_SDK5    0x02FFE000 // __DSiHeader
-
-#define ENGINE_LOCATION_ARM7  	0x037C0000
 
 #define DSI_INFO_BASE_ADDR		0x027FF000
 #define DSI_INFO_BASE_ADDR_SDK5	0x02FFF000
@@ -252,7 +245,7 @@ void* findSleepInputWriteOffset(const tNDSHeader* ndsHeader, bool* isArm) {
 }
 
 static void patchSleepInputWrite(const tNDSHeader* ndsHeader) {
-	if (sleepMode) {
+	if (bootloader_data->sleepMode) {
 		return;
 	}
 
@@ -325,13 +318,13 @@ static void my_readUserSettings(tNDSHeader* ndsHeader) {
 
 	tonccpy(personalData, currentSettings, sizeof(PERSONAL_DATA));
 
-	if (useTwlCfg && (language == 0xFF || language == -1)) {
-		language = twlCfgLang;
+	if (useTwlCfg && (bootloader_data->language == 0xFF || bootloader_data->language == -1)) {
+		bootloader_data->language = twlCfgLang;
 	}
 
-	if (language >= 0 && language <= 7) {
+	if (bootloader_data->language >= 0 && bootloader_data->language <= 7) {
 		// Change language
-		personalData->language = language; //*(u8*)((u32)ndsHeader - 0x11C) = language;
+		personalData->language = bootloader_data->language; //*(u8*)((u32)ndsHeader - 0x11C) = language;
 	}
 
 	if (personalData->language != 6 && ndsHeader->reserved1[8] == 0x80) {
@@ -909,6 +902,16 @@ void fixDSBrowser(void) {
 
 
 static void setMemoryAddress(const tNDSHeader* ndsHeader) {
+	struct cardengine_main_data_t* cardengine_data = (struct cardengine_main_data_t*)bootloader_data->cardEngineLocation;
+	uint8_t instantiated_restart_data[sizeof(restart_self_data)];
+	if(cardengine_data->boot_type == CARDENGINE_BOOT_TYPE_SD)
+		tonccpy(instantiated_restart_data, getSDResetData(), sizeof(restart_self_data));
+	else {
+		tonccpy(instantiated_restart_data, restart_self_data, sizeof(restart_self_data));
+		tonccpy(instantiated_restart_data + 8, bootloader_data->selfTitleId, sizeof(bootloader_data->selfTitleId));
+		tonccpy(instantiated_restart_data + 16, bootloader_data->selfTitleId, sizeof(bootloader_data->selfTitleId));
+	}
+
 	if (ROMsupportsDsiMode(ndsHeader)) {
 		//	u8* deviceListAddr = (u8*)((u8*)0x02FFE1D4);
 		//	tonccpy(deviceListAddr, deviceList_bin, deviceList_bin_len);
@@ -956,8 +959,37 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 		}
 		*(u8*)(0x02FFFD70) = language_byte;
 
-		if (dsiModeConfirmed) {
+		// Fix hard reset of some carts
+		if((memcmp(ndsHeader->gameCode, "VPY", 3) == 0)) // Pokémon Conquest
+			tonccpy((u8*)0x02FFE230, instantiated_restart_data + 8, sizeof(bootloader_data->selfTitleId));
+
+		// Fix hard reset being bugged in general
+		*(u8*)(0x02FFD800) = 1;
+		*(u8*)(0x02FFD830) = 1;
+		*(u8*)(0x02FFD840) = 1;
+		tonccpy((u8*)0x02FFD850, (u8*)0x02FFE230, 8);
+	}
+
+	if(isDSiMode()) {
+		if(bootloader_data->runCardEngine) {
+			cardengine_data = (struct cardengine_main_data_t*)cardengine_data->copy_location;
+			tonccpy(((u8*)cardengine_data) + cardengine_data->reset_data_offset, instantiated_restart_data, sizeof(instantiated_restart_data));
+		}
+		else if(bootloader_data->redirectPowerButton) {
+			uintptr_t cardengine_after_area = 0x02000400;
+			if(cardengine_data->boot_type == CARDENGINE_BOOT_TYPE_SD)
+				cardengine_after_area = 0x02000C00;
+			// Maybe this check should be more complex... For now, it is fine, I think.
+			// Basically, we want to ensure we are not overwriting anything with our data.
+			if((((uintptr_t)ndsHeader->arm9destination) >= cardengine_after_area) && (((uintptr_t)ndsHeader->arm7destination) >= cardengine_after_area))
+				setRebootParams(cardengine_data, (u8*)(bootloader_data->cardEngineLocation + cardengine_data->boot_path_offset), instantiated_restart_data);
+		}
+		if(bootloader_data->runCardEngine && bootloader_data->redirectPowerButton) {
 			i2cWriteRegister(I2C_PM, I2CREGPM_MMCPWR, 1);		// Have IRQ check for power button press
+			i2cWriteRegister(I2C_PM, I2CREGPM_RESETFLAG, 1);	// SDK 5 --> Bootflag = Warmboot/SkipHealthSafety
+		}
+		else {
+			i2cWriteRegister(I2C_PM, I2CREGPM_MMCPWR, 0);		// Have IRQ not check for power button press
 			i2cWriteRegister(I2C_PM, I2CREGPM_RESETFLAG, 1);	// SDK 5 --> Bootflag = Warmboot/SkipHealthSafety
 		}
 	}
@@ -986,7 +1018,7 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 // Main function
 
 void arm7_main (void) {
-	__dsimode = dsiMode;
+	__dsimode = bootloader_data->dsiMode;
 	initMBK();
 
 	int errorCode;
@@ -1002,7 +1034,7 @@ void arm7_main (void) {
 
 	//debugOutput (ERR_STS_LOAD_BIN);
 
-	if (!twlMode) {
+	if (!bootloader_data->twlMode) {
 		REG_SCFG_ROM = 0x703;	// Needed for Golden Sun: Dark Dawn to work
 	}
 
@@ -1022,10 +1054,10 @@ void arm7_main (void) {
 	}
 
 	if (isDSiMode()) {
-		if (twlMode == 2) {
-			dsiModeConfirmed = twlMode;
+		if (bootloader_data->twlMode == 2) {
+			dsiModeConfirmed = bootloader_data->twlMode;
 		} else {
-			dsiModeConfirmed = twlMode && ROMsupportsDsiMode(&dsiHeaderTemp->ndshdr);
+			dsiModeConfirmed = bootloader_data->twlMode && ROMsupportsDsiMode(&dsiHeaderTemp->ndshdr);
 		}
 	}
 
@@ -1099,18 +1131,18 @@ void arm7_main (void) {
 			*(u32*)0x3FFFFC8 = 0x7884;	// Fix sound pitch table for DSi mode (works with SDK5 binaries)
 
 			if ((!ROMsupportsDsiMode(ndsHeader)) || (ROMsupportsDsiMode(ndsHeader) && !(*(u8*)0x02FFE1BF & BIT(0)))) {
-				twlTouch ? DSiTouchscreenMode() : NDSTouchscreenMode();
+				bootloader_data->twlTouch ? DSiTouchscreenMode() : NDSTouchscreenMode();
 				*(u16*)0x4000500 = 0x807F;
 			}
 		} else {
 			REG_SCFG_ROM = 0x703;
 
-			twlTouch ? DSiTouchscreenMode() : NDSTouchscreenMode();
+			bootloader_data->twlTouch ? DSiTouchscreenMode() : NDSTouchscreenMode();
 			*(u16*)0x4000500 = 0x807F;
 
 			REG_GPIO_WIFI |= BIT(8);	// Old NDS-Wifi mode
 
-			if (!sdAccess) {
+			if (!bootloader_data->sdAccess) {
 				REG_SCFG_CLK = 0x0180;
 				REG_SCFG_EXT = 0x93FBFB06;
 			}
@@ -1123,7 +1155,7 @@ void arm7_main (void) {
 		// TODO: once blocksds updates, make this simpler...
 		uint32_t old_appflags = __DSiHeader->appflags;
 		__DSiHeader->appflags |= 1;
-		if(soundFreq)
+		if(bootloader_data->soundFreq)
 			soundExtSetFrequencyTWL(48);
 		else
 			soundExtSetFrequencyTWL(32);
@@ -1135,6 +1167,8 @@ void arm7_main (void) {
 	}
 
 	patchSleepInputWrite(ndsHeader);
+
+	bool gameSoftReset = false;
 
 	if (memcmp(ndsHeader->gameCode, "NTR", 3) == 0		// Download Play ROMs
 	 || memcmp(ndsHeader->gameCode, "ASM", 3) == 0		// Super Mario 64 DS
@@ -1148,29 +1182,35 @@ void arm7_main (void) {
 		gameSoftReset = true;
 	}
 
-	if (memcmp(ndsHeader->gameTitle, "TOP TF/SD DS", 12) == 0) {
-		runCardEngine = false;
-	}
+	if (memcmp(ndsHeader->gameTitle, "TOP TF/SD DS", 12) == 0)
+		bootloader_data->runCardEngine = false;
 
 	// Does not currently work for DSi games launched in DSi mode
-	if(dsiModeConfirmed && ROMsupportsDsiMode(ndsHeader)) {
-		runCardEngine = false;
-	}
+	if(((!isDSiMode()) && (!swiIsDebugger())) || (dsiModeConfirmed && ROMsupportsDsiMode(ndsHeader)))
+		bootloader_data->runCardEngine = false;
+
+	if(bootloader_data->cardEngineSize == 0)
+		bootloader_data->runCardEngine = false;
 
 	u32* cheatDataBasePos = (u32*)0x023F0000;
-	if (runCardEngine) {
-		// WRAM-A mapped to the 0x37C0000 - 0x37FFFFF area : 256k
-		REG_MBK6=0x080037C0;
+	if(bootloader_data->runCardEngine) {
 
-		u32* cardEnginePos = *((u32**)cardengine_arm7_bin);
-		u32* cheatDataPos = (u32*)ENGINE_LOCATION_ARM7;
+		u32 wram_a_start = 0x037C0000;
+		u32 wram_a_end = 0x037FFFFF;
+		u32* cardEnginePos = *((u32**)bootloader_data->cardEngineLocation);
+		u32* cheatDataPos = (u32*)((((uintptr_t)cardEnginePos) - CHEAT_DATA_SIZE) & ~0x1F);
 
-		copyLoop(cardEnginePos, (u32*)cardengine_arm7_bin, cardengine_arm7_bin_size);
+		if((((u32)cardEnginePos) >= wram_a_start) && (((u32)cardEnginePos) <= wram_a_end)) {
+			// WRAM-A mapped to the 0x37C0000 - 0x37FFFFF area : 256k
+			REG_MBK6=0x080037C0;
+		}
+
+		copyLoop(cardEnginePos, (u32*)bootloader_data->cardEngineLocation, bootloader_data->cardEngineSize);
 		toncset(cheatDataPos, 0, CHEAT_DATA_SIZE); // Zero out cheat data
 		cheatDataPos[0] = CHEAT_DATA_END_SIGNATURE_FIRST;
 		cheatDataPos[CHEAT_DATA_SIZE / sizeof(cheatDataPos[0])] = CHEAT_DATA_END_SIGNATURE_FIRST;
 
-		errorCode = hookNdsRetail(ndsHeader, cardEnginePos, cheatDataPos);
+		errorCode = hookNdsRetail(ndsHeader, cardEnginePos, cheatDataPos, gameSoftReset, bootloader_data->language, bootloader_data->redirectPowerButton);
 		if (errorCode == ERR_NONE) {
 			nocashMessage("card hook Sucessfull");
 		} else {
@@ -1184,11 +1224,11 @@ void arm7_main (void) {
 
 	//debugOutput (ERR_STS_START);
 
-	arm9_boostVram = boostVram;
-	arm9_scfgUnlock = scfgUnlock;
-	arm9_twlClock = twlClock;
+	arm9_boostVram = bootloader_data->boostVram;
+	arm9_scfgUnlock = bootloader_data->scfgUnlock;
+	arm9_twlClock = bootloader_data->twlClock;
 	arm9_isSdk5 = isSdk5(moduleParams);
-	arm9_runCardEngine = runCardEngine;
+	arm9_runCardEngine = bootloader_data->runCardEngine;
 
 	if (isSdk5(moduleParams) && ROMsupportsDsiMode(ndsHeader) && dsiModeConfirmed) {
 		initMBK_dsiMode();
@@ -1196,7 +1236,7 @@ void arm7_main (void) {
 		REG_SCFG_CLK = 0x187;
 	}
 
-	if(!scfgUnlock && (!dsiModeConfirmed) && isDSiMode()) {
+	if(!bootloader_data->scfgUnlock && (!dsiModeConfirmed) && isDSiMode()) {
 		// lock SCFG
 		REG_SCFG_EXT &= ~(1UL << 31);
 	}

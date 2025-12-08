@@ -22,9 +22,9 @@ include $(BLOCKSDS_VERSION_FILE)
 
 NAME		:= slot1launch
 
-export GAMECODE			:= SL1L
-export GAMEGROUPID		:= 00
-export GAMEDATATITLE	:= SLOT1LAUNCH
+GAMECODE		:= SL1L
+GAMEGROUPID		:= 00
+GAMEDATATITLE	:= SLOT1LAUNCH
 
 GAME_TITLE		:= Slot-1 Launcher
 GAME_SUBTITLE	:= Launch cartridge in Slot 1
@@ -89,22 +89,26 @@ clean:
 	$(V)$(MAKE) -f Makefile.arm7 -C bootloader clean --no-print-directory
 	$(V)$(MAKE) -C bootloaderAlt clean --no-print-directory
 	$(V)$(MAKE) -C cardengine_arm7 clean --no-print-directory
+	$(V)$(MAKE) -C cardengine_arm7 -f Makefile.isne clean --no-print-directory
 	$(V)$(RM) $(ROM) $(ROM_dsi) $(ROM_dsi_cartridge) build $(SDIMAGE)
 
-arm9: cardengine_arm7 bootloader bootloaderAlt
+arm9: cardengine_arm7 cardengine_isne_arm7 bootloader bootloaderAlt
 	$(V)+$(MAKE) -C arm9 --no-print-directory
 
-arm7: cardengine_arm7 bootloader bootloaderAlt
+arm7: cardengine_arm7 cardengine_isne_arm7 bootloader bootloaderAlt
 	$(V)+$(MAKE) -C arm7 --no-print-directory
 
-bootloader: cardengine_arm7
+bootloader:
 	$(V)+$(MAKE) -f Makefile.arm7 -C bootloader --no-print-directory
 
-bootloaderAlt: cardengine_arm7
+bootloaderAlt:
 	$(V)+$(MAKE) -C bootloaderAlt --no-print-directory
 
 cardengine_arm7:
 	$(V)+$(MAKE) -C cardengine_arm7 --no-print-directory
+
+cardengine_isne_arm7:
+	$(V)+$(MAKE) -C cardengine_arm7 -f Makefile.isne --no-print-directory
 
 ifneq ($(strip $(NITROFSDIR)),)
 # Additional arguments for ndstool

@@ -11,14 +11,14 @@ ARM_NONE_EABI_PATH	?= $(WONDERFUL_TOOLCHAIN)/toolchain/gcc-arm-none-eabi/bin/
 # Source code paths
 # -----------------
 
-SOURCEDIRS	:= source
-INCLUDEDIRS	:= include
+SOURCEDIRS	:= source ../common/source
+INCLUDEDIRS	:= ../common/include
 BINDIRS		:=
 
 # Defines passed to all files
 # ---------------------------
 
-DEFINES		:=
+DEFINES		:= -DDO_DSI
 
 # Libraries
 # ---------

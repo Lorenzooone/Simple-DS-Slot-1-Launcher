@@ -28,7 +28,9 @@ extern "C" {
 #ifndef PACKED
 #define PACKED __attribute__((packed))
 #endif
+#ifndef ALIGNED
 #define ALIGNED(x) __attribute__((aligned(x)))
+#endif
 
 struct launch_engine_data_t {
 	int scfgUnlock;
@@ -41,9 +43,10 @@ struct launch_engine_data_t {
 	int runCardEngine;
 	int language;
 	int sleepMode;
+	int redirectPowerButton;
 } PACKED ALIGNED(4);
 
-__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader);
+__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, uint32_t boot_type, char* boot_path);
 
 #ifdef __cplusplus
 }

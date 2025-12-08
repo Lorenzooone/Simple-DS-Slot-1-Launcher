@@ -21,30 +21,51 @@
 
 #include "load_bin.h"
 #include "loadAlt_bin.h"
+#include "cardengine_arm7_bin.h"
+#include "cardengine_arm7_isne_bin.h"
 #include "launch_engine.h"
 #include "tonccpy.h"
 #include "min_font_bin.h"
 
-#define LCDC_BANK_D (u16*)0x06860000
+#include "cardengine_defs.h"
+#include "bootloader_defs.h"
 
-#define DSIMODE_OFFSET 4
-#define LANGUAGE_OFFSET 8
-#define SDACCESS_OFFSET 12
-#define SCFGUNLOCK_OFFSET 16
-#define TWLMODE_OFFSET 20
-#define TWLCLOCK_OFFSET 24
-#define BOOSTVRAM_OFFSET 28
-#define TWLTOUCH_OFFSET 32
-#define SOUNDFREQ_OFFSET 36
-#define RUNCARDENGINE_OFFSET 40
-#define SLEEPMODE_OFFSET 44
+#define LCDC_BANK_D ((u16*)0x06860000)
 
-__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader)
+__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, uint32_t boot_type, char* boot_path)
 {
 	bool pass_min_font = true;
 	int dsi_mode_enabled = 1;
 	if(!isDSiMode())
 		dsi_mode_enabled = 0;
+
+	const uint8_t* chosen_cardengine = dsi_mode_enabled ? cardengine_arm7_bin : (isHwDebugger() ? cardengine_arm7_isne_bin : NULL);
+	size_t chosen_cardengine_size = dsi_mode_enabled ? cardengine_arm7_bin_size : (isHwDebugger() ? cardengine_arm7_isne_bin_size : 0);
+	const struct cardengine_main_data_t base_empty_cardengine_data = {0};
+	struct cardengine_main_data_t cardengine_data = (chosen_cardengine == NULL) ? base_empty_cardengine_data : *((struct cardengine_main_data_t*)chosen_cardengine);
+	cardengine_data.boot_type = boot_type;
+
+	const uint8_t* chosen_bootloader = altBootloader ? loadAlt_bin : load_bin;
+	size_t chosen_bootloader_size = altBootloader ? loadAlt_bin_size : load_bin_size;
+	struct bootloader_main_data_t load_data = *((struct bootloader_main_data_t*)chosen_bootloader);
+
+	// Set the parameters for the loader
+	load_data.dsiMode = dsi_mode_enabled;
+	load_data.language = launch_engine_data->language;
+	load_data.sdAccess = launch_engine_data->sdaccess;
+	load_data.scfgUnlock = launch_engine_data->scfgUnlock;
+	load_data.twlMode = launch_engine_data->twlmode;
+	load_data.twlClock = launch_engine_data->twlclk;
+	load_data.boostVram = launch_engine_data->twlvram;
+	load_data.twlTouch = launch_engine_data->twltouch;
+	load_data.soundFreq = launch_engine_data->soundFreq;
+	load_data.runCardEngine = launch_engine_data->runCardEngine;
+	load_data.sleepMode = launch_engine_data->sleepMode;
+	load_data.redirectPowerButton = launch_engine_data->redirectPowerButton;
+	load_data.cardEngineLocation = ((load_data.copy_end + 3) >> 2) << 2;
+	load_data.cardEngineSize = chosen_cardengine_size;
+	for(size_t i = 0; i < 8; i++)
+		load_data.selfTitleId[i] = ((uint8_t*)&__DSiHeader->tid_low)[i];
 
 	irqDisable(IRQ_ALL);
 
@@ -55,20 +76,20 @@ __attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* laun
 	toncset (LCDC_BANK_D, 0, 128 * 1024);
 
 	// Load the loader/patcher into the correct address
-	tonccpy (LCDC_BANK_D, altBootloader ? loadAlt_bin : load_bin, altBootloader ? loadAlt_bin_size : load_bin_size);
+	tonccpy (LCDC_BANK_D, chosen_bootloader, chosen_bootloader_size);
 
-	// Set the parameters for the loader
-	toncset32 ((u8*)LCDC_BANK_D+DSIMODE_OFFSET, dsi_mode_enabled, 1);	// Not working?
-	toncset32 ((u8*)LCDC_BANK_D+LANGUAGE_OFFSET, launch_engine_data->language, 1);
-	toncset32 ((u8*)LCDC_BANK_D+SDACCESS_OFFSET, launch_engine_data->sdaccess, 1);
-	toncset32 ((u8*)LCDC_BANK_D+SCFGUNLOCK_OFFSET, launch_engine_data->scfgUnlock, 1);
-	toncset32 ((u8*)LCDC_BANK_D+TWLMODE_OFFSET, launch_engine_data->twlmode, 1);
-	toncset32 ((u8*)LCDC_BANK_D+TWLCLOCK_OFFSET, launch_engine_data->twlclk, 1);
-	toncset32 ((u8*)LCDC_BANK_D+BOOSTVRAM_OFFSET, launch_engine_data->twlvram, 1);
-	toncset32 ((u8*)LCDC_BANK_D+TWLTOUCH_OFFSET, launch_engine_data->twltouch, 1);
-	toncset32 ((u8*)LCDC_BANK_D+SOUNDFREQ_OFFSET, launch_engine_data->soundFreq, 1);
-	toncset32 ((u8*)LCDC_BANK_D+RUNCARDENGINE_OFFSET, launch_engine_data->runCardEngine, 1);
-	toncset32 ((u8*)LCDC_BANK_D+SLEEPMODE_OFFSET, launch_engine_data->sleepMode, 1);
+	tonccpy (LCDC_BANK_D, &load_data, sizeof(load_data));
+
+	u8* cardengine_target_ptr = (u8*)(LCDC_BANK_D + ((load_data.cardEngineLocation - load_data.copy_location) / sizeof(LCDC_BANK_D[0])));
+	if(chosen_cardengine != NULL)
+		tonccpy(cardengine_target_ptr, chosen_cardengine, chosen_cardengine_size);
+
+	// This has important information, copy it regardless
+	tonccpy (cardengine_target_ptr, &cardengine_data, sizeof(cardengine_data));
+	if(boot_path != NULL)
+		tonccpy(cardengine_target_ptr + cardengine_data.boot_path_offset, boot_path, cardengine_data.boot_path_max_len);
+	else
+		toncset(cardengine_target_ptr + cardengine_data.boot_path_offset, 0, cardengine_data.boot_path_max_len);
 
 	irqDisable(IRQ_ALL);
 
@@ -102,7 +123,7 @@ __attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* laun
 	*(vu32*)0x02FFFE24 = (u32)0x02FFFE04;  // Set ARM9 Loop address --> resetARM9(0x02FFFE04);
 
 	// Reset ARM7
-	resetARM7(0x06020000);
+	resetARM7(load_data.copy_location);
 
 	// swi soft reset
 	swiSoftReset();

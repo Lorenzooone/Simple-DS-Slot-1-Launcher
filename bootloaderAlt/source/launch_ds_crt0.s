@@ -20,6 +20,10 @@ _start:
 @---------------------------------------------------------------------------------
 	b	startUp
 
+startLoad:
+	.word	_start
+endLoad:
+	.word	end
 dsiMode:
 	.word	0x00000000
 language:
@@ -42,6 +46,14 @@ runCardEngine:
 	.word	0x00000000
 sleepMode:
 	.word	0x00000000
+readPowerButton:
+	.word	0x00000000
+cardEngineLocation:
+	.word	0x00000000
+cardEngineSize:
+	.word	0x00000000
+selfTitleId:
+	.space 8
 
 startUp:
 	mov	r0, #0x04000000		@ IME = 0;

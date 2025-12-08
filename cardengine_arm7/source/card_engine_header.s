@@ -9,7 +9,9 @@
 .global card_engine_start_sync
 .global card_engine_end
 .global cardStruct
-.global patches_offset
+.global copy_offset
+.global reset_data
+.global boot_path
 .global sdk_version
 .global fileCluster
 .global saveCluster
@@ -24,6 +26,8 @@
 
 copy_offset:
 	.word copy_offset
+copy_end:
+	.word end
 patches_offset:
 	.word	patches
 intr_vblank_orig_return:
@@ -34,6 +38,24 @@ gameSoftReset:
 	.word	0x00000000
 cheat_data_offset:    
 	.word	0x00000000
+boot_type:
+	.word	0x00000000
+read_power_button:
+	.word	0x00000000
+reset_data_offset:
+	.word	reset_data - copy_offset
+reset_data_len:
+	.word	reset_data_end - reset_data
+boot_path_offset:
+	.word	boot_path - copy_offset
+boot_path_max_len:
+	.word	boot_path_end - boot_path
+reset_data:
+	.space 32
+reset_data_end:
+boot_path:
+	.space 256
+boot_path_end:
 
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 

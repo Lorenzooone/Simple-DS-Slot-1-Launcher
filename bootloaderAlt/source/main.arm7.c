@@ -38,6 +38,7 @@
 #include <nds/dma.h>
 #include <nds/arm7/audio.h>
 #include <nds/ipc.h>
+#include <nds/arm7/i2c.h>
 #include <string.h>
 
 // #include <nds/registers_alt.h>
@@ -55,21 +56,18 @@
 #include "tonccpy.h"
 #include "read_card.h"
 #include "module_params.h"
-#include "cardengine_arm7_bin.h"
 #include "hook.h"
 #include "find.h"
+#include "restart_self.h"
 
+#include "bootloader_defs.h"
+#include "cardengine_defs.h"
+#include "reset_to_loader.h"
 
-//extern u32 dsiMode;	// Not working?
-extern u32 language;
-extern u32 sdAccess;
-extern u32 scfgUnlock;
-extern u32 twlMode;
-extern u32 twlClock;
-extern u32 twlTouch;
-extern u32 soundFreq;
-extern u32 sleepMode;
-extern u32 runCardEngine;
+extern bool __dsimode;
+extern u32 _start;
+
+struct bootloader_main_data_t* bootloader_data = (struct bootloader_main_data_t*)&_start;
 
 extern bool arm9_runCardEngine;
 
@@ -81,8 +79,6 @@ bool my_isDSiMode() {
 
 bool useTwlCfg = false;
 int twlCfgLang = 0;
-
-bool gameSoftReset = false;
 
 extern void arm7_clearmem (void* loc, size_t len);
 extern __attribute__((noreturn)) void arm7_actual_jump(void* fn);
@@ -112,8 +108,6 @@ static const u16 sleepInputWriteBeqSignatureThumb[1] = {0xD000};
 // Important things
 #define NDS_HEAD 0x027FFE00
 tNDSHeader* ndsHeader = (tNDSHeader*)NDS_HEAD;
-
-#define ENGINE_LOCATION_ARM7  	0x037C0000
 
 #define DSI_INFO_BASE_ADDR		0x027FF000
 #define DSI_INFO_BASE_ADDR_SDK5	0x02FFF000
@@ -235,7 +229,7 @@ void* findSleepInputWriteOffset(const tNDSHeader* ndsHeader, bool* isArm) {
 }
 
 static void patchSleepInputWrite(const tNDSHeader* ndsHeader) {
-	if (sleepMode) {
+	if (bootloader_data->sleepMode) {
 		return;
 	}
 
@@ -354,8 +348,8 @@ void arm7_resetMemory (void)
 	} else {
 		arm7_readFirmware(settingsOffset + 0x100, (u8*)0x027FFC80, 0x70);
 	}
-	if (language >= 0 && language < 6) {
-		*(u8*)(0x027FFCE4) = language;	// Change language
+	if (bootloader_data->language >= 0 && bootloader_data->language < 6) {
+		*(u8*)(0x027FFCE4) = bootloader_data->language;	// Change language
 	}
 	
 	// Load FW header 
@@ -639,6 +633,41 @@ int arm7_loadBinary (void) {
 	return ERR_NONE;
 }
 
+static void restart_data_setup() {
+	struct cardengine_main_data_t* cardengine_data = (struct cardengine_main_data_t*)bootloader_data->cardEngineLocation;
+	uint8_t instantiated_restart_data[sizeof(restart_self_data)];
+	if(cardengine_data->boot_type == CARDENGINE_BOOT_TYPE_SD)
+		copyLoop(instantiated_restart_data, getSDResetData(), sizeof(restart_self_data));
+	else {
+		copyLoop(instantiated_restart_data, restart_self_data, sizeof(restart_self_data));
+		copyLoop(instantiated_restart_data + 8, bootloader_data->selfTitleId, sizeof(bootloader_data->selfTitleId));
+		copyLoop(instantiated_restart_data + 16, bootloader_data->selfTitleId, sizeof(bootloader_data->selfTitleId));
+	}
+
+	if(my_isDSiMode()) {
+		if(bootloader_data->runCardEngine) {
+			cardengine_data = (struct cardengine_main_data_t*)cardengine_data->copy_location;
+			copyLoop(((u8*)cardengine_data) + cardengine_data->reset_data_offset, instantiated_restart_data, sizeof(instantiated_restart_data));
+		}
+		else if(bootloader_data->redirectPowerButton) {
+			uintptr_t cardengine_after_area = 0x02000400;
+			if(cardengine_data->boot_type == CARDENGINE_BOOT_TYPE_SD)
+				cardengine_after_area = 0x02000C00;
+			// Maybe this check should be more complex... For now, it is fine, I think.
+			// Basically, we want to ensure we are not overwriting anything with our data.
+			if((((uintptr_t)ndsHeader->arm9destination) >= cardengine_after_area) && (((uintptr_t)ndsHeader->arm7destination) >= cardengine_after_area))
+				setRebootParams(cardengine_data, (u8*)(bootloader_data->cardEngineLocation + cardengine_data->boot_path_offset), instantiated_restart_data);
+		}
+		if(bootloader_data->runCardEngine && bootloader_data->redirectPowerButton) {
+			i2cWriteRegister(I2C_PM, I2CREGPM_MMCPWR, 1);		// Have IRQ check for power button press
+			i2cWriteRegister(I2C_PM, I2CREGPM_RESETFLAG, 1);	// SDK 5 --> Bootflag = Warmboot/SkipHealthSafety
+		}
+		else {
+			i2cWriteRegister(I2C_PM, I2CREGPM_MMCPWR, 0);		// Have IRQ not check for power button press
+			i2cWriteRegister(I2C_PM, I2CREGPM_RESETFLAG, 1);	// SDK 5 --> Bootflag = Warmboot/SkipHealthSafety
+		}
+	}
+}
 
 /*-------------------------------------------------------------------------
 arm7_startBinary
@@ -698,14 +727,20 @@ void initMBK() {
 	}
 }*/
 
-
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // Main function
 
 void arm7_main (void) {
+	__dsimode = bootloader_data->dsiMode;
 
-	if (runCardEngine) {
-		arm9_runCardEngine = runCardEngine;
+	if((!my_isDSiMode()) && (!swiIsDebugger()))
+		bootloader_data->runCardEngine = false;
+
+	if(bootloader_data->cardEngineSize == 0)
+		bootloader_data->runCardEngine = false;
+
+	if (bootloader_data->runCardEngine) {
+		arm9_runCardEngine = bootloader_data->runCardEngine;
 		initMBK();
 	}
 
@@ -732,17 +767,17 @@ void arm7_main (void) {
 	}
 	
 	if (my_isDSiMode()) {
-		twlTouch ? DSiTouchscreenMode() : NDSTouchscreenMode();
+		bootloader_data->twlTouch ? DSiTouchscreenMode() : NDSTouchscreenMode();
 		*(u16*)0x4000500 = 0x807F;
 
 		REG_GPIO_WIFI |= BIT(8);	// Old NDS-Wifi mode
 	}
 
-	//if (!twlMode) {
+	//if (!bootloader_data->twlMode) {
 	//	fixFlashcardForDSiMode();
 	//} else {
 	//	REG_SCFG_ROM = 0x703;
-		if (!sdAccess) {
+		if (!bootloader_data->sdAccess) {
 			REG_SCFG_CLK = 0x0180;
 			REG_SCFG_EXT = 0x93FBFB06;
 		}
@@ -752,6 +787,8 @@ void arm7_main (void) {
 	//}
 
 	patchSleepInputWrite(ndsHeader);
+
+	bool gameSoftReset = false;
 
 	if (memcmp((char*)NDS_HEAD+0xC, "NTR", 3) == 0		// Download Play ROMs
 	 || memcmp((char*)NDS_HEAD+0xC, "ASM", 3) == 0		// Super Mario 64 DS
@@ -766,22 +803,27 @@ void arm7_main (void) {
 	}
 
 	u32* cheatDataBasePos = (u32*)0x023F0000;
-	if (runCardEngine) {
-		// WRAM-A mapped to the 0x37C0000 - 0x37FFFFF area : 256k
-		REG_MBK6=0x080037C0;
+	if(bootloader_data->runCardEngine) {
 
-		u32* cardEnginePos = *((u32**)cardengine_arm7_bin);
-		u32* cheatDataPos = (u32*)ENGINE_LOCATION_ARM7;
+		u32 wram_a_start = 0x037C0000;
+		u32 wram_a_end = 0x037FFFFF;
+		u32* cardEnginePos = *((u32**)bootloader_data->cardEngineLocation);
+		u32* cheatDataPos = (u32*)((((uintptr_t)cardEnginePos) - CHEAT_DATA_SIZE) & ~0x1F);
 
-		copyLoop(cardEnginePos, (u32*)cardengine_arm7_bin, cardengine_arm7_bin_size);
-		arm7_clearmem(cheatDataPos, CHEAT_DATA_SIZE); // Clear cheat data from main memory
+		if((((u32)cardEnginePos) >= wram_a_start) && (((u32)cardEnginePos) <= wram_a_end)) {
+			// WRAM-A mapped to the 0x37C0000 - 0x37FFFFF area : 256k
+			REG_MBK6=0x080037C0;
+		}
+
+		copyLoop(cardEnginePos, (u32*)bootloader_data->cardEngineLocation, bootloader_data->cardEngineSize);
+		arm7_clearmem(cheatDataPos, CHEAT_DATA_SIZE); // Zero out cheat data
 		cheatDataPos[0] = CHEAT_DATA_END_SIGNATURE_FIRST;
 		cheatDataPos[CHEAT_DATA_SIZE / sizeof(cheatDataPos[0])] = CHEAT_DATA_END_SIGNATURE_FIRST;
 
-		errorCode = hookNdsRetail(ndsHeader, cardEnginePos, cheatDataPos);
-		if (errorCode == ERR_NONE)
+		errorCode = hookNdsRetail(ndsHeader, cardEnginePos, cheatDataPos, gameSoftReset, bootloader_data->language, bootloader_data->redirectPowerButton);
+		if (errorCode == ERR_NONE) {
 			nocashMessage("card hook Sucessfull");
-		else {
+		} else {
 			nocashMessage("error during card hook");
 			debugOutput(errorCode);
 		}
@@ -792,10 +834,12 @@ void arm7_main (void) {
 
 	debugOutput (ERR_STS_START);
 
-	if (!scfgUnlock) {
+	if (!bootloader_data->scfgUnlock) {
 		// lock SCFG
 		REG_SCFG_EXT &= ~(1UL << 31);
 	}
+
+	restart_data_setup();
 
 	arm7_startBinary();
 }

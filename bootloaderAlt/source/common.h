@@ -66,7 +66,9 @@ static inline void dmaFill(const void* src, void* dest, uint32 size) {
 	while (DMA_CR(3) & DMA_BUSY);
 }
 
-static inline void copyLoop (u32* dest, const u32* src, size_t size) {
+static inline void copyLoop (void* destvoid, const void* srcvoid, size_t size) {
+	u32* dest = (u32*)destvoid;
+	u32* src = (u32*)srcvoid;
 	do {
 		*dest++ = *src++;
 	} while (size -= 4);
