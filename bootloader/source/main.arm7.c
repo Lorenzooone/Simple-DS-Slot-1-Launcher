@@ -960,7 +960,9 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 		*(u8*)(0x02FFFD70) = language_byte;
 
 		// Fix hard reset of some carts
-		if((memcmp(ndsHeader->gameCode, "VPY", 3) == 0)) // Pokémon Conquest
+		if(((cardengine_data->boot_type == CARDENGINE_BOOT_TYPE_SD) || (cardengine_data->boot_type == CARDENGINE_BOOT_TYPE_DSIWARE)) && (
+		(memcmp(ndsHeader->gameCode, "VPY", 3) == 0)) // Pokémon Conquest
+		)
 			tonccpy((u8*)0x02FFE230, instantiated_restart_data + 8, sizeof(bootloader_data->selfTitleId));
 
 		// Fix hard reset being bugged in general
