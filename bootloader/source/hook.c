@@ -92,8 +92,7 @@ static u32* hookInterruptHandler (u32* addr, size_t size) {
 	// 2     LCD V-Counter Match
 }
 
-
-int hookNdsRetail(const tNDSHeader* ndsHeader, u32* cardEngineLocation, u32* cheatDataPos, bool gameSoftReset, uint32_t language, uint32_t redirectPowerButton) {
+u32* getHookLocation(const tNDSHeader* ndsHeader) {
 	u32* hookLocation = hookInterruptHandler((u32*)ndsHeader->arm7destination, ndsHeader->arm7binarySize);
 
 	// SDK 5
@@ -169,6 +168,11 @@ int hookNdsRetail(const tNDSHeader* ndsHeader, u32* cardEngineLocation, u32* che
 				break;
 		}
 	}
+
+	return hookLocation;
+}
+
+int hookNdsRetail(u32* hookLocation, u32* cardEngineLocation, u32* cheatDataPos, bool gameSoftReset, uint32_t language, uint32_t redirectPowerButton) {
 
 	if (!hookLocation) {
 		return ERR_HOOK;

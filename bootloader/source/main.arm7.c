@@ -1187,16 +1187,23 @@ void arm7_main (void) {
 	if (memcmp(ndsHeader->gameTitle, "TOP TF/SD DS", 12) == 0)
 		bootloader_data->runCardEngine = false;
 
-	// Does not currently work for DSi games launched in DSi mode
-	if(((!isDSiMode()) && (!swiIsDebugger())) || (dsiModeConfirmed && ROMsupportsDsiMode(ndsHeader)))
+	// Does not currently work for DSi games launched in DSi mode on a 16 MB DSis
+	if(((!isDSiMode()) && (!swiIsDebugger())) || (dsiModeConfirmed && ROMsupportsDsiMode(ndsHeader) && (!bootloader_data->hasDoubleRAM)))
 		bootloader_data->runCardEngine = false;
 
 	if(bootloader_data->cardEngineSize == 0)
 		bootloader_data->runCardEngine = false;
 
+	// Only enable the stuff for cardengine if it makes sense...
+	u32* hookLocation = NULL;
+	if(bootloader_data->runCardEngine) {
+		hookLocation = getHookLocation(ndsHeader);
+		if(hookLocation == NULL)
+			bootloader_data->runCardEngine = false;
+	}
+
 	u32* cheatDataBasePos = (u32*)0x023F0000;
 	if(bootloader_data->runCardEngine) {
-
 		u32 wram_a_start = 0x037C0000;
 		u32 wram_a_end = 0x037FFFFF;
 		u32* cardEnginePos = *((u32**)bootloader_data->cardEngineLocation);
@@ -1212,7 +1219,7 @@ void arm7_main (void) {
 		cheatDataPos[0] = CHEAT_DATA_END_SIGNATURE_FIRST;
 		cheatDataPos[CHEAT_DATA_SIZE / sizeof(cheatDataPos[0])] = CHEAT_DATA_END_SIGNATURE_FIRST;
 
-		errorCode = hookNdsRetail(ndsHeader, cardEnginePos, cheatDataPos, gameSoftReset, bootloader_data->language, bootloader_data->redirectPowerButton);
+		errorCode = hookNdsRetail(hookLocation, cardEnginePos, cheatDataPos, gameSoftReset, bootloader_data->language, bootloader_data->redirectPowerButton);
 		if (errorCode == ERR_NONE) {
 			nocashMessage("card hook Sucessfull");
 		} else {

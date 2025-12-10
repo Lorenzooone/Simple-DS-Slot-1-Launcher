@@ -28,6 +28,7 @@
 #include "launch_engine.h"
 #include "old_launch_engine_structs.h"
 #include "cardengine_defs.h"
+#include "utils.h"
 
 #define SAVED_VERSION 0x01020000
 
@@ -48,7 +49,7 @@
 #define DEFAULT_SOUNDFREQ_DS 0
 
 #define DEFAULT_SLEEPMODE 1
-#define DEFAULT_CARDENGINE 1
+#define DEFAULT_CARDENGINE 0
 #define DEFAULT_REDIRECTPOWERBUTTON 0
 
 #define DEFAULT_AUTOBOOT 1
@@ -317,6 +318,27 @@ bool is_card_ready(bool do_read) {
 	return is_ready;
 }
 
+static int** get_settings_options(size_t* size_to_set, bool is_3ds) {
+	int **settings_options = settings_options_dsi;
+	size_t size_settings = NUM_SETTINGS_OPTIONS_DSI;
+	if(!isDSiMode()) {
+		if(isRAMDoubled()) {
+			settings_options = settings_options_isne;
+			size_settings = NUM_SETTINGS_OPTIONS_ISNE;
+		}
+		else {
+			settings_options = settings_options_ds;
+			size_settings = NUM_SETTINGS_OPTIONS_DS;
+		}
+	}
+	else if(is_3ds) {
+		settings_options = settings_options_3ds;
+		size_settings = NUM_SETTINGS_OPTIONS_3DS;
+	}
+	*size_to_set = size_settings;
+	return settings_options;
+}
+
 static void update_console_x_pos() {
 	int x = 0;
 	int y = 0;
@@ -371,7 +393,7 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 	}
 	else
 		PRINT_FUNCTION ("DS - ");
-	if(isHwDebugger()) {
+	if(isRAMDoubled()) {
 		ram_size *= 2;
 		if(!isDSiMode())
 			debugger_type = 1;
@@ -410,22 +432,8 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 	}
 	PRINT_FUNCTION("\nName: %s\n", name);
 
-	int **settings_options = settings_options_dsi;
-	size_t size_settings = NUM_SETTINGS_OPTIONS_DSI;
-	if(!isDSiMode()) {
-		if(isHwDebugger()) {
-			settings_options = settings_options_isne;
-			size_settings = NUM_SETTINGS_OPTIONS_ISNE;
-		}
-		else {
-			settings_options = settings_options_ds;
-			size_settings = NUM_SETTINGS_OPTIONS_DS;
-		}
-	}
-	else if(is_3ds) {
-		settings_options = settings_options_3ds;
-		size_settings = NUM_SETTINGS_OPTIONS_3DS;
-	}
+	size_t size_settings = 0;
+	int **settings_options = get_settings_options(&size_settings, is_3ds);
 	PRINT_FUNCTION("Settings:");
 	for(size_t i = 0; i < size_settings; i++) {
 		PRINT_FUNCTION("\n ");
@@ -542,16 +550,12 @@ static void fix_data_bool_val(int* value) {
 		*value = 0;
 }
 
-static void input_processing(u32 curr_keys, struct all_options_data_t* all_options_data, bool has_sd_access, bool has_nand_access, std::string &base_title_nand_path) {
+static void input_processing(u32 curr_keys, struct all_options_data_t* all_options_data, bool has_sd_access, bool has_nand_access, bool is_3ds, std::string &base_title_nand_path) {
 	if((curr_keys & KEY_X) || (curr_keys & KEY_Y) || (curr_keys & KEY_L) || (curr_keys & KEY_R))
 		cartridge_read_header_data_total();
 
-	int **settings_options = settings_options_dsi;
-	size_t size_settings = NUM_SETTINGS_OPTIONS_DSI;
-	if(!isDSiMode()) {
-		settings_options = settings_options_ds;
-		size_settings = NUM_SETTINGS_OPTIONS_DS;
-	}
+	size_t size_settings = 0;
+	int **settings_options = get_settings_options(&size_settings, is_3ds);
 
 	if(curr_keys & KEY_UP)
 		all_options_data->cursor_index -= 1;
@@ -791,7 +795,7 @@ int main(int argc, char **argv) {
 			curr_keys = keysDown();
 		} while(!(curr_keys & ( KEY_X | KEY_Y | KEY_R | KEY_L | KEY_LEFT | KEY_RIGHT | KEY_UP | KEY_DOWN | KEY_A | KEY_START)));
 
-		input_processing(curr_keys, &all_options_data, has_sd_access, has_nand_access, base_title_nand_path);
+		input_processing(curr_keys, &all_options_data, has_sd_access, has_nand_access, is_3ds, base_title_nand_path);
 		print_data(debugger_type, &all_options_data, has_sd_access || has_nand_access, is_3ds);
 
 		if(curr_keys & KEY_START) {
@@ -802,7 +806,7 @@ int main(int argc, char **argv) {
 	const auto& gameCode = ndsHeader.header.gameCode;
 	bool useAltBootloader = memcmp(gameCode, "AMFE", 4) == 0 || memcmp(gameCode, "ALXX", 4) == 0;
 	setup_defaults(&all_options_data.all_saved_data.launch_engine_data, is_3ds);
-	runLaunchEngine(&all_options_data.all_saved_data.launch_engine_data, useAltBootloader, boot_type, ((argc > 0) && isDSiMode()) ? argv[0] : NULL);
+	runLaunchEngine(&all_options_data.all_saved_data.launch_engine_data, useAltBootloader, boot_type, ((argc > 0) && isDSiMode()) ? argv[0] : NULL, is_dsi_cartridge());
 
 	return 0;
 }

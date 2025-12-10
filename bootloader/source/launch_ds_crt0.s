@@ -48,6 +48,8 @@ sleepMode:
 	.word	0x00000000
 readPowerButton:
 	.word	0x00000000
+isRAMDoubled:
+	.word	0x00000000
 cardEngineLocation:
 	.word	0x00000000
 cardEngineSize:

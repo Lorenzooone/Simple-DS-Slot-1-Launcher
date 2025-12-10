@@ -190,6 +190,8 @@ void arm9_main (void) {
 	WRAM_CR = 0x03;
 	REG_EXMEMCNT = 0xE880;
 
+	while(arm9_stateFlag != ARM9_CARDENGINE);
+
 	if (arm9_runCardEngine) {
 		initMBKARM9();
 	}

@@ -72,15 +72,14 @@ ARM7DIR		:= arm7
 ROM					:= $(NAME).nds
 ROM_dsi				:= $(NAME).dsi
 ROM_dsi_cartridge	:= $(NAME)_cartridge.dsi
+ROM_homebrew		:= $(NAME)_homebrew.nds
 
 # Targets
 # -------
 
 .PHONY: all clean cartridge arm9 arm7 cardengine_arm7 bootloader bootloaderAlt dldipatch sdimage
 
-all: $(ROM) $(ROM_dsi)
-
-cartridge: $(ROM_dsi_cartridge)
+all: $(ROM) $(ROM_dsi) $(ROM_dsi_cartridge) $(ROM_homebrew)
 
 clean:
 	@echo "  CLEAN"
@@ -90,12 +89,13 @@ clean:
 	$(V)$(MAKE) -C bootloaderAlt clean --no-print-directory
 	$(V)$(MAKE) -C cardengine_arm7 clean --no-print-directory
 	$(V)$(MAKE) -C cardengine_arm7 -f Makefile.isne clean --no-print-directory
-	$(V)$(RM) $(ROM) $(ROM_dsi) $(ROM_dsi_cartridge) build $(SDIMAGE)
+	$(V)$(MAKE) -C cardengine_arm7 -f Makefile.dsi_exp clean --no-print-directory
+	$(V)$(RM) $(ROM) $(ROM_dsi) $(ROM_dsi_cartridge) $(ROM_homebrew) build $(SDIMAGE)
 
-arm9: cardengine_arm7 cardengine_isne_arm7 bootloader bootloaderAlt
+arm9: cardengine_arm7 cardengine_isne_arm7 cardengine_dsi_exp_arm7 bootloader bootloaderAlt
 	$(V)+$(MAKE) -C arm9 --no-print-directory
 
-arm7: cardengine_arm7 cardengine_isne_arm7 bootloader bootloaderAlt
+arm7: cardengine_arm7 cardengine_isne_arm7 cardengine_dsi_exp_arm7 bootloader bootloaderAlt
 	$(V)+$(MAKE) -C arm7 --no-print-directory
 
 bootloader:
@@ -110,6 +110,9 @@ cardengine_arm7:
 cardengine_isne_arm7:
 	$(V)+$(MAKE) -C cardengine_arm7 -f Makefile.isne --no-print-directory
 
+cardengine_dsi_exp_arm7:
+	$(V)+$(MAKE) -C cardengine_arm7 -f Makefile.dsi_exp --no-print-directory
+
 ifneq ($(strip $(NITROFSDIR)),)
 # Additional arguments for ndstool
 NDSTOOL_ARGS	:= -d $(NITROFSDIR)
@@ -118,8 +121,6 @@ NDSTOOL_ARGS	:= -d $(NITROFSDIR)
 $(ROM): $(NITROFSDIR)
 # Make the DSi ROM depend on the filesystem only if it is needed
 $(ROM_dsi): $(NITROFSDIR)
-# Make the DSi cartridge ROM depend on the filesystem only if it is needed
-$(ROM_dsi_cartridge): $(NITROFSDIR)
 endif
 
 # Combine the title strings
@@ -152,6 +153,11 @@ $(ROM_dsi): arm9 arm7
 $(ROM_dsi_cartridge): $(ROM_dsi)
 	cp $(ROM_dsi) $@
 	$(PYTHON_CMD) nds_change_filetype.py $@ 00030000
+	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@
+
+$(ROM_homebrew): $(ROM)
+	cp $(ROM) $@
+	$(PYTHON_CMD) nds_set_homebrew_title.py $@
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@
 
 sdimage:

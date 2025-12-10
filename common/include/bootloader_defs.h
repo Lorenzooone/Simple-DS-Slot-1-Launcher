@@ -24,6 +24,7 @@ struct bootloader_main_data_t {
 	uint32_t runCardEngine;
 	uint32_t sleepMode;
 	uint32_t redirectPowerButton;
+	uint32_t hasDoubleRAM;
 	uint32_t cardEngineLocation;
 	uint32_t cardEngineSize;
 	uint8_t selfTitleId[8];

@@ -23,24 +23,37 @@
 #include "loadAlt_bin.h"
 #include "cardengine_arm7_bin.h"
 #include "cardengine_arm7_isne_bin.h"
+#include "cardengine_arm7_dsi_exp_ram_bin.h"
 #include "launch_engine.h"
 #include "tonccpy.h"
 #include "min_font_bin.h"
 
 #include "cardengine_defs.h"
 #include "bootloader_defs.h"
+#include "utils.h"
 
 #define LCDC_BANK_D ((u16*)0x06860000)
 
-__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, uint32_t boot_type, char* boot_path)
+__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, uint32_t boot_type, char* boot_path, bool is_dsi_cart)
 {
 	bool pass_min_font = true;
 	int dsi_mode_enabled = 1;
 	if(!isDSiMode())
 		dsi_mode_enabled = 0;
 
-	const uint8_t* chosen_cardengine = dsi_mode_enabled ? cardengine_arm7_bin : (isHwDebugger() ? cardengine_arm7_isne_bin : NULL);
-	size_t chosen_cardengine_size = dsi_mode_enabled ? cardengine_arm7_bin_size : (isHwDebugger() ? cardengine_arm7_isne_bin_size : 0);
+	const uint8_t* chosen_cardengine = dsi_mode_enabled ? cardengine_arm7_bin : NULL;
+	size_t chosen_cardengine_size = dsi_mode_enabled ? cardengine_arm7_bin_size : 0;
+	if(isRAMDoubled()) {
+		if(!dsi_mode_enabled) {
+			chosen_cardengine = cardengine_arm7_isne_bin;
+			chosen_cardengine_size = cardengine_arm7_isne_bin_size;
+		}
+		if(dsi_mode_enabled && is_dsi_cart && (launch_engine_data->twlmode != 0) && (!altBootloader)) {
+			chosen_cardengine = cardengine_arm7_dsi_exp_ram_bin;
+			chosen_cardengine_size = cardengine_arm7_dsi_exp_ram_bin_size;
+		}
+	}
+
 	const struct cardengine_main_data_t base_empty_cardengine_data = {0};
 	struct cardengine_main_data_t cardengine_data = (chosen_cardengine == NULL) ? base_empty_cardengine_data : *((struct cardengine_main_data_t*)chosen_cardengine);
 	cardengine_data.boot_type = boot_type;
@@ -62,6 +75,7 @@ __attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* laun
 	load_data.runCardEngine = launch_engine_data->runCardEngine;
 	load_data.sleepMode = launch_engine_data->sleepMode;
 	load_data.redirectPowerButton = launch_engine_data->redirectPowerButton;
+	load_data.hasDoubleRAM = isRAMDoubled();
 	load_data.cardEngineLocation = ((load_data.copy_end + 3) >> 2) << 2;
 	load_data.cardEngineSize = chosen_cardengine_size;
 	for(size_t i = 0; i < 8; i++)

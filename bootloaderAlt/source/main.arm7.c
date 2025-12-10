@@ -744,6 +744,8 @@ void arm7_main (void) {
 		initMBK();
 	}
 
+	arm9_stateFlag = ARM9_CARDENGINE;
+
 	int errorCode;
 
 	// Wait for ARM9 to at least start
@@ -802,6 +804,16 @@ void arm7_main (void) {
 		gameSoftReset = true;
 	}
 
+	// Only enable the stuff for cardengine if it makes sense...
+	// Sadly this check can only be done once the data has already
+	// been loaded...
+	u32* hookLocation = NULL;
+	if(bootloader_data->runCardEngine) {
+		hookLocation = getHookLocation(ndsHeader);
+		if(hookLocation == NULL)
+			bootloader_data->runCardEngine = false;
+	}
+
 	u32* cheatDataBasePos = (u32*)0x023F0000;
 	if(bootloader_data->runCardEngine) {
 
@@ -820,7 +832,7 @@ void arm7_main (void) {
 		cheatDataPos[0] = CHEAT_DATA_END_SIGNATURE_FIRST;
 		cheatDataPos[CHEAT_DATA_SIZE / sizeof(cheatDataPos[0])] = CHEAT_DATA_END_SIGNATURE_FIRST;
 
-		errorCode = hookNdsRetail(ndsHeader, cardEnginePos, cheatDataPos, gameSoftReset, bootloader_data->language, bootloader_data->redirectPowerButton);
+		errorCode = hookNdsRetail(hookLocation, cardEnginePos, cheatDataPos, gameSoftReset, bootloader_data->language, bootloader_data->redirectPowerButton);
 		if (errorCode == ERR_NONE) {
 			nocashMessage("card hook Sucessfull");
 		} else {
