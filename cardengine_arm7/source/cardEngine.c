@@ -60,7 +60,7 @@ void myIrqHandlerVBlank(void) {
 		powerOffTimer = 0;
 
 	if(powerOffTimer >= 60) {
-		//systemShutDown();
+		systemShutDown();
 		// If here, the shutdown failed...
 		// Still, try resetting...
 		released_power = true;
