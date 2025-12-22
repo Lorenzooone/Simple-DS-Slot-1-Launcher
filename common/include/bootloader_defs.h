@@ -8,6 +8,8 @@
 #define ALIGNED(x) __attribute__((aligned(x)))
 #endif
 
+//#define DO_BOOTLOADER_DEBUG_PRINTS
+
 struct bootloader_main_data_t {
 	const uint32_t first_jump;
 	const uint32_t copy_location;

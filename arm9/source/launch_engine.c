@@ -37,6 +37,9 @@
 __attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, uint32_t boot_type, char* boot_path, bool is_dsi_cart)
 {
 	bool pass_min_font = true;
+	#ifndef DO_BOOTLOADER_DEBUG_PRINTS
+	pass_min_font = false;
+	#endif
 	int dsi_mode_enabled = 1;
 	if(!isDSiMode())
 		dsi_mode_enabled = 0;

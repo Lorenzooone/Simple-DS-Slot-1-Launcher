@@ -111,9 +111,9 @@ LDFLAGS		:= $(ARCH) $(LIBDIRSFLAGS) -Wl,--nmagic -Wl,-Map,$(MAP) $(DEFINES) \
 # Intermediate build files
 # ------------------------
 
-OBJS_ASSETS	:= $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_BIN))) $(BUILDDIR)/cardengine_arm7.bin.o
+OBJS_ASSETS	:= $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_BIN)))
 
-HEADERS_ASSETS	:= $(patsubst %.bin,%_bin.h,$(addprefix $(BUILDDIR)/,$(SOURCES_BIN))) $(BUILDDIR)/cardengine_arm7_bin.h
+HEADERS_ASSETS	:= $(patsubst %.bin,%_bin.h,$(addprefix $(BUILDDIR)/,$(SOURCES_BIN)))
 
 OBJS_SOURCES	:= $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_S))) \
 		   $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_C))) \
@@ -148,10 +148,6 @@ dump: $(DUMP)
 clean:
 	@echo "  CLEAN.7"
 	$(V)$(RM) $(ELF) $(DUMP) $(MAP) $(BUILDDIR) $(OUTPUT)
-
-$(BUILDDIR)/cardengine_arm7.bin:
-	@$(MKDIR) -p $(@D)
-	@cp ../data/cardengine_arm7.bin $(BUILDDIR)/cardengine_arm7.bin
 
 # Rules
 # -----

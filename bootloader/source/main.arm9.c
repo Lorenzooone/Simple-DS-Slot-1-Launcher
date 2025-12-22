@@ -44,6 +44,7 @@
 #include <stdlib.h>
 
 #include "common.h"
+#include "bootloader_defs.h"
 #include "min_font_bin.h"
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -311,6 +312,9 @@ void __attribute__((target("arm"))) arm9_main (void) {
 	}
 
 	bool ignore_min_font = true;
+	#ifndef DO_BOOTLOADER_DEBUG_PRINTS
+	ignore_min_font = false;
+	#endif
 	int vram_a_u16_offset = 0;
 	int vram_a_size_removed = 0;
 	if(ignore_min_font) {
@@ -336,7 +340,8 @@ void __attribute__((target("arm"))) arm9_main (void) {
 	BG_PALETTE[0] = 0xFFFF;
 	dmaFill((u16*)&arm9_BLANK_RAM, BG_PALETTE+1, (2*1024)-2);
 	dmaFill((u16*)&arm9_BLANK_RAM, OAM, 2*1024);
-	dmaFill((u16*)&arm9_BLANK_RAM, (u16*)0x04000000, 0x56);  // Clear main display registers
+	dmaFill((u16*)&arm9_BLANK_RAM, (u16*)0x04000000, 0x06);  // Clear main display registers - Pre VCount
+	dmaFill((u16*)&arm9_BLANK_RAM, (u16*)0x04000008, 0x4E);  // Clear main display registers - Post VCount
 	dmaFill((u16*)&arm9_BLANK_RAM, (u16*)0x04001000, 0x56);  // Clear sub display registers
 	dmaFill((u16*)&arm9_BLANK_RAM, VRAM_A + vram_a_u16_offset, (0x20000*3) - vram_a_size_removed);		// Banks A, B, C
 	dmaFill((u16*)&arm9_BLANK_RAM, VRAM_D, 272*1024);		// Banks D (excluded), E, F, G, H, I
