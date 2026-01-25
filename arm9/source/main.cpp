@@ -30,6 +30,8 @@
 #include "cardengine_defs.h"
 #include "utils.h"
 
+#define VERSION_STR "1.4.1.3"
+
 #define SAVED_VERSION 0x01020000
 
 #define DEFAULT_SCFGUNLOCK_DSI 1
@@ -406,7 +408,8 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 		PRINT_FUNCTION (" - Retail\n");
 	PRINT_FUNCTION ("Please insert a DS cartridge.\n");
 	PRINT_FUNCTION ("X/Y/L/R: Update Information.\n");
-	PRINT_FUNCTION ("START: Try to launch the game.\n\n");
+	PRINT_FUNCTION ("START: Try to launch the game.\n");
+	PRINT_FUNCTION ("                      v " VERSION_STR "\n");
 	bool success = true;
 	if(*(u32*)&ndsHeader == 0xffffffff)
 		success = false;
