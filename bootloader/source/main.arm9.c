@@ -85,6 +85,10 @@ extern __attribute__((noreturn)) void arm9_actual_jump(void* fn);
 
 void initMBKARM9() {
 	// default dsiware settings
+	// arm7 is master of WRAM-A, arm9 of WRAM-B & C
+
+	// WRAM-A fully mapped to arm7
+	*((vu32*)REG_MBK1)=0x8D898581; // same as dsiware
 
 	// WRAM-B fully mapped to arm9 // inverted order
 	*((vu32*)REG_MBK2)=0x8C888480;
@@ -111,7 +115,6 @@ void initMBKARM9_dsiMode(void) {
 	REG_MBK6 = *(u32*)0x02FFE194;
 	REG_MBK7 = *(u32*)0x02FFE198;
 	REG_MBK8 = *(u32*)0x02FFE19C;
-	REG_MBK9 = *(u32*)0x02FFE1AC;
 }
 
 void SetBrightness(u8 screen, s8 bright) {
@@ -278,8 +281,10 @@ void __attribute__((target("arm"))) arm9_main (void) {
 	WRAM_CR = 0x03;
 	REG_EXMEMCNT = 0xE880;
 
-	initMBKARM9();
+	arm9_stateFlag = ARM9_START;
 
+	while(arm9_stateFlag != ARM9_SETMBK_START);
+	initMBKARM9();
 	arm9_stateFlag = ARM9_START;
 
 	REG_IME = 0;
@@ -374,12 +379,14 @@ void __attribute__((target("arm"))) arm9_main (void) {
 			//arm9_errorOutput (arm9_errorCode, arm9_errorClearBG);
 			arm9_stateFlag = ARM9_READY;
 		}
+		if (arm9_stateFlag == ARM9_SETMBK) {
+			if(arm9_dsimode && dsiModeConfirmed && arm9_isSdk5 && ndsHeader->unitCode > 0)
+				initMBKARM9_dsiMode();
+			arm9_stateFlag = ARM9_READY;
+		}
 		if (arm9_stateFlag == ARM9_SETSCFG) {
 			if(arm9_dsimode) {
 				if(dsiModeConfirmed) {
-					if(arm9_isSdk5 && ndsHeader->unitCode > 0) {
-						initMBKARM9_dsiMode();
-					}
 					REG_SCFG_EXT = 0x8307F100;
 					// bit 7 is read only in reality...
 					if(arm9_twlClock)
@@ -411,6 +418,10 @@ void __attribute__((target("arm"))) arm9_main (void) {
 		}
 		arm9_flush_cache();
 	}
+
+	if(arm9_dsimode && dsiModeConfirmed && arm9_isSdk5 && ndsHeader->unitCode > 0)
+		WRAM_CR = *(u8*)0x02FFE1AF;
+
 	arm9_stateFlag = ARM9_READY;
 	
 	// wait for vblank then boot

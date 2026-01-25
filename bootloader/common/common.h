@@ -53,7 +53,9 @@
 #define ARM9_BOOTBIN 4
 #define ARM9_DISPERR 5
 #define ARM9_SETSCFG 6
-#define ARM9_PRINT_MEM 7
+#define ARM9_SETMBK 7
+#define ARM9_SETMBK_START 8
+#define ARM9_PRINT_MEM 9
 //};
 
 extern tNDSHeader* ndsHeader;
