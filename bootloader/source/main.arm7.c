@@ -963,7 +963,7 @@ static void setMemoryAddress(const tNDSHeader* ndsHeader) {
 		if(((cardengine_data->boot_type == CARDENGINE_BOOT_TYPE_SD) || (cardengine_data->boot_type == CARDENGINE_BOOT_TYPE_DSIWARE)) && (
 		(memcmp(ndsHeader->gameCode, "VPY", 3) == 0)) // Pokémon Conquest
 		)
-			tonccpy((u8*)0x02FFE230, instantiated_restart_data + 8, sizeof(bootloader_data->selfTitleId));
+			tonccpy((u8*)0x02FFE230, instantiated_restart_data + 16, sizeof(bootloader_data->selfTitleId));
 
 		// Fix hard reset being bugged in general
 		*(u8*)(0x02FFD800) = 1;

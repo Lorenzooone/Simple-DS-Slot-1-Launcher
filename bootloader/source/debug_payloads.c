@@ -2,6 +2,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+    #ifndef _Static_assert
+        #define _Static_assert static_assert
+    #endif
+#endif
+
+#define STATIC_ASSERT(test_for_true) \
+    _Static_assert((test_for_true), "(" #test_for_true ") failed")
+
 /*
 static uint32_t curr_payload_pos = 0x02200000;
 
@@ -102,25 +111,30 @@ void insert_arm9_payload() {
 	0xE3A01003,
 	// Returns back
 	0xE12FFF1E};
-	#define NUM_CONNECT_COPY_INST 1
+	STATIC_ASSERT((sizeof(instructions) / sizeof(instructions[0])) == NUM_INST);
+	#define NUM_CONNECT_COPY_INST 3
 	#define NUM_COPY_INST (8 + NUM_CONNECT_COPY_INST)
 	uint32_t instructions_copy_payload[NUM_COPY_INST] = {0, 0, 0xE92D0003, 0xE51F0010, 0xE51F1018, 0xE5801000, 0xE8BD0003,
 	// End of payload, place instructions to connect back below...
-	0xE3A01000,
+	//0xE3A01000,
+	0xE59F1000,
+	0xEA000000,
+	0x02005098,
 	// Returns back
 	0xE12FFF1E};
+	STATIC_ASSERT((sizeof(instructions_copy_payload) / sizeof(instructions_copy_payload[0])) == NUM_COPY_INST);
 	volatile uint8_t* payload_pos= (volatile uint8_t*)0x02200000;
 	volatile uint8_t* payload_copy_pos = payload_pos + (NUM_INST * 4);
 	for(int i = 0; i < NUM_INST; i++)
 		write_le32(payload_pos + (i * 4), instructions[i]);
 	for(int i = 0; i < NUM_COPY_INST; i++)
 		write_le32(payload_copy_pos + (i * 4), instructions_copy_payload[i]);
-	volatile uint8_t* copy_jump_pos = (volatile uint8_t*)0x02004954;
-	volatile uint8_t* jump_pos = (volatile uint8_t*)0x0200F22E;
-	//create_connection_to_pos(jump_pos, jump_pos, payload_pos, false);
-	create_connection_to_pos(copy_jump_pos, copy_jump_pos, payload_copy_pos + 8, false);
-	create_connection_to_pos(payload_copy_pos, jump_pos, payload_pos, true);
-	write_le32(payload_copy_pos + 4, jump_pos);
+	volatile uint8_t* copy_jump_pos = (volatile uint8_t*)0x020049F0;
+	volatile uint8_t* jump_pos = (volatile uint8_t*)0x02019FA0;
+	//create_connection_to_pos(jump_pos, (uintptr_t)jump_pos, (uintptr_t)payload_pos, false);
+	create_connection_to_pos(copy_jump_pos, (uintptr_t)copy_jump_pos, (uintptr_t)payload_copy_pos + 8, false);
+	create_connection_to_pos(payload_copy_pos, (uintptr_t)jump_pos, (uintptr_t)payload_pos, false);
+	write_le32(payload_copy_pos + 4, (uintptr_t)jump_pos);
 	*/
 }
 

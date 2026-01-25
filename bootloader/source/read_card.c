@@ -205,9 +205,7 @@ void switchToTwlBlowfish(sNDSHeaderExt* ndsHeader) {
 		slot_reset_shared();
 
 	// Dummy command sent after card reset
-	cardParamCommand (CARD_CMD_DUMMY, 0,
-		CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F),
-		NULL, 0);
+	//cardParamCommand (CARD_CMD_DUMMY, 0, CARD_ACTIVATE | CARD_nRESET | CARD_CLK_SLOW | CARD_BLK_SIZE(1) | CARD_DELAY1(0x1FFF) | CARD_DELAY2(0x3F), NULL, 0);
 
 	//int iCardDevice = 1;
 
