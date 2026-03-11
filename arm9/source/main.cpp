@@ -30,7 +30,7 @@
 #include "cardengine_defs.h"
 #include "utils.h"
 
-#define VERSION_STR "1.4.1.3"
+#define VERSION_STR "1.4.1.4"
 
 #define SAVED_VERSION 0x01020000
 
@@ -58,8 +58,12 @@
 
 #define DEFAULT_VALUE_GENERIC -1
 
+#define UNLAUNCH_CHECK_POS ((uint8_t*)0x01004894)
+
 #define FILENAME_APP_DATA "sd:/_nds/s1l1_data.bin"
 #define FILENAME_NAND_APP_DATA_APPEND "data/private_hb.sav"
+
+uint8_t unlaunch_first_bytes_check[] = {0x99, 0xD5, 0x20, 0x5F, 0x57, 0x44, 0xF5, 0xB9};
 
 struct all_saved_data_t {
 	uint32_t version;
@@ -247,10 +251,10 @@ FILE *fopen_mkdir(const char *path, const char *mode) {
     return fopen(path,mode);
 }
 
-void cart_reset() {
+static void _cart_reset(int frames) {
 	if(isDSiMode()) {
 		disableSlot1();
-		for(int i = 0; i < 10; i++)
+		for(int i = 0; i < frames; i++)
 			swiWaitForVBlank();
 		enableSlot1();
 		while(REG_ROMCTRL & CARD_BUSY)
@@ -261,6 +265,10 @@ void cart_reset() {
 		for(int i = 0; i < 15; i++)
 			swiWaitForVBlank();
 	}
+}
+
+void cart_reset() {
+	_cart_reset(10);
 }
 
 static bool is_dsi_cartridge() {
@@ -409,6 +417,7 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 	PRINT_FUNCTION ("Please insert a DS cartridge.\n");
 	PRINT_FUNCTION ("X/Y/L/R: Update Information.\n");
 	PRINT_FUNCTION ("START: Try to launch the game.\n");
+
 	PRINT_FUNCTION ("                      v " VERSION_STR "\n");
 	bool success = true;
 	if(*(u32*)&ndsHeader == 0xffffffff)
@@ -682,6 +691,16 @@ static bool has_been_booted_from_nand(const char* app_filepath) {
 	return memcmp(app_filepath + (app_filepath_len - app_extension_len), app_extension, app_extension_len) == 0;
 }
 
+static bool has_been_booted_from_unlaunch(bool is_3ds) {
+	if((!isDSiMode()) || is_3ds)
+		return false;
+
+	for(size_t i = 0; i < sizeof(unlaunch_first_bytes_check); i++)
+		if(UNLAUNCH_CHECK_POS[i] != unlaunch_first_bytes_check[i])
+			return false;
+	return true;
+}
+
 static std::string get_base_title_nand_path(const char* app_filepath) {
 	size_t app_filepath_len = strlen(app_filepath);
 	const char content_base_path[] = "/content/";
@@ -773,6 +792,11 @@ int main(int argc, char **argv) {
 	is_3ds = fifo_arm7 & 0x10000;
 
 	sysSetCardOwner(BUS_OWNER_ARM9);
+
+	if(has_been_booted_from_unlaunch(is_3ds)) {
+		_cart_reset(20);
+	}
+
 	cartridge_read_header_data_total();
 
 	if((!(curr_keys & KEY_B)) && all_options_data.all_saved_data.autoboot)
