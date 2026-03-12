@@ -30,7 +30,7 @@
 #include "cardengine_defs.h"
 #include "utils.h"
 
-#define VERSION_STR "1.4.1.4"
+#define VERSION_STR "1.4.1.5"
 
 #define SAVED_VERSION 0x01020000
 
@@ -831,7 +831,7 @@ int main(int argc, char **argv) {
 	}
 
 	const auto& gameCode = ndsHeader.header.gameCode;
-	bool useAltBootloader = memcmp(gameCode, "AMFE", 4) == 0 || memcmp(gameCode, "ALXX", 4) == 0;
+	bool useAltBootloader = memcmp(gameCode, "AMFE", 4) == 0; // Is this really needed?
 	setup_defaults(&all_options_data.all_saved_data.launch_engine_data, is_3ds);
 	runLaunchEngine(&all_options_data.all_saved_data.launch_engine_data, useAltBootloader, boot_type, ((argc > 0) && isDSiMode()) ? argv[0] : NULL, is_dsi_cartridge());
 

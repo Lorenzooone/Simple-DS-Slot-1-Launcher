@@ -29,6 +29,7 @@
 #define ARM9
 #undef ARM7
 #include <nds/memory.h>
+#include <nds/arm9/background.h>
 #include <nds/arm9/video.h>
 #include <nds/arm9/input.h>
 #include <nds/interrupts.h>
@@ -58,6 +59,10 @@ extern __attribute__((noreturn)) void arm9_actual_jump(void* fn);
 
 void initMBKARM9() {
 	// default dsiware settings
+	// arm7 is master of WRAM-A, arm9 of WRAM-B & C
+
+	// WRAM-A fully mapped to arm7
+	*((vu32*)REG_MBK1)=0x8D898581; // same as dsiware
 
 	// WRAM-B fully mapped to arm9 // inverted order
 	*((vu32*)REG_MBK2)=0x8C888480;
@@ -175,6 +180,55 @@ Written by Chishm
 }
 */
 
+static void ux_to_screen(volatile uint16_t* vram_map, uint32_t value, size_t num_displayed_bytes) {
+	size_t num_nybbles = 2 * num_displayed_bytes;
+	for(int i = 0; i < num_nybbles; i++)
+		vram_map[i] = ((value >> ((4 * (num_nybbles - 1 - i)))) & 0xF) + 1;
+}
+
+static void u8_to_screen(volatile uint16_t* vram_map, uint8_t value) {
+	ux_to_screen(vram_map, value, 1);
+}
+
+static void u32_to_screen(volatile uint16_t* vram_map, uint32_t value) {
+	ux_to_screen(vram_map, value, 4);
+}
+
+void memory_view_to_screen(uint8_t* address) {
+	#define TILE_1D_MAP (1<<4)
+	#define ACTIVATE_SCREEN_HW (1<<16)
+	REG_POWERCNT = (vu16) (POWER_LCD | POWER_2D_A);
+	VRAM_A_CR = VRAM_ENABLE;
+	REG_DISPSTAT = 0;
+    REG_DISPCNT = 0 | TILE_1D_MAP | ACTIVATE_SCREEN_HW | (0x1 << 8);
+    REG_DISPCNT_SUB = 0 | TILE_1D_MAP | ACTIVATE_SCREEN_HW | (0x1 << 8);
+	//videoSetMode(0);
+	//videoSetModeSub(0);
+	BG_PALETTE[0] = 0x7C00;
+	BG_PALETTE[1] = 0x7FFF;
+	BG_PALETTE[2] = 0x7C00;
+	BG_PALETTE_SUB[0] = 0x7C00;
+	BG_PALETTE_SUB[1] = 0x7FFF;
+	BG_PALETTE_SUB[2] = 0x7C00;
+	REG_BG0CNT = 0x0100;
+	REG_BG0CNT_SUB = 0x0100;
+	vramSetBankA(VRAM_A_MAIN_BG);
+
+	volatile uint16_t* vram_target_map = (volatile uint16_t*)0x06000800;
+	size_t single_iter_shown = 8;
+	for(int i = 0; i < SCREEN_HEIGHT >> 3; i++) {
+		u32_to_screen(&vram_target_map[(i * (SCREEN_WIDTH >> 3))], (uintptr_t)(address + (single_iter_shown * i)));
+		int start = 9;
+		for(int j = 0; j < single_iter_shown; j++)
+			u8_to_screen(&vram_target_map[(i * (SCREEN_WIDTH >> 3)) + start + (j * 3)], address[(single_iter_shown * i) + j]);
+	}
+
+	while(!(REG_KEYINPUT & KEY_A));
+	while(REG_KEYINPUT & KEY_A);
+	for(int i = 0; i < (SCREEN_HEIGHT >> 3) * (SCREEN_WIDTH >> 3); i++)
+		vram_target_map[i] = 0;
+}
+
 /*-------------------------------------------------------------------------
 arm9_main
 Clears the ARM9's icahce and dcache
@@ -190,11 +244,14 @@ void arm9_main (void) {
 	WRAM_CR = 0x03;
 	REG_EXMEMCNT = 0xE880;
 
-	while(arm9_stateFlag != ARM9_CARDENGINE);
+	arm9_stateFlag = ARM9_INIT;
 
-	if (arm9_runCardEngine) {
-		initMBKARM9();
-	}
+	while(arm9_stateFlag != ARM9_MBKSET);
+
+	initMBKARM9();
+	arm9_stateFlag = ARM9_INIT;
+
+	while(arm9_stateFlag != ARM9_CARDENGINE);
 
 	arm9_stateFlag = ARM9_START;
 

@@ -47,13 +47,15 @@
 //ARM9_STATE
 //enum {
 #define ARM9_BOOT 0
-#define ARM9_CARDENGINE 1
-#define ARM9_START 2
-#define ARM9_MEMCLR 3
-#define ARM9_READY 4
-#define ARM9_BOOTBIN 5
-#define ARM9_DISPERR 6
-#define ARM9_SETSCFG 7
+#define ARM9_INIT 1
+#define ARM9_MBKSET 2
+#define ARM9_CARDENGINE 3
+#define ARM9_START 4
+#define ARM9_MEMCLR 5
+#define ARM9_READY 6
+#define ARM9_BOOTBIN 7
+#define ARM9_DISPERR 8
+#define ARM9_SETSCFG 9
 //};
 
 extern volatile int arm9_stateFlag;

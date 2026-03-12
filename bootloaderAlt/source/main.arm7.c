@@ -71,12 +71,6 @@ struct bootloader_main_data_t* bootloader_data = (struct bootloader_main_data_t*
 
 extern bool arm9_runCardEngine;
 
-u16 scfgRomBak = 0;
-
-bool my_isDSiMode() {
-	return ((vu8)scfgRomBak == 1);
-}
-
 bool useTwlCfg = false;
 int twlCfgLang = 0;
 
@@ -326,7 +320,7 @@ void arm7_resetMemory (void)
 	// clear last part of EXRAM, skipping the ARM9's section
 	arm7_clearmem ((void*)0x023FE000, 0x2000);
 
-	if(my_isDSiMode() || swiIsDebugger())
+	if(isDSiMode() || swiIsDebugger())
 		arm7_clearmem((void*)0x02400000, 0x400000); // Clear the rest of EXRAM
 
 	REG_IE = 0;
@@ -644,7 +638,7 @@ static void restart_data_setup() {
 		copyLoop(instantiated_restart_data + 16, bootloader_data->selfTitleId, sizeof(bootloader_data->selfTitleId));
 	}
 
-	if(my_isDSiMode()) {
+	if(isDSiMode()) {
 		if(bootloader_data->runCardEngine) {
 			cardengine_data = (struct cardengine_main_data_t*)cardengine_data->copy_location;
 			copyLoop(((u8*)cardengine_data) + cardengine_data->reset_data_offset, instantiated_restart_data, sizeof(instantiated_restart_data));
@@ -694,19 +688,8 @@ void arm7_startBinary (void)
 
 
 void initMBK() {
-	// arm7 is master of WRAM-A, arm9 of WRAM-B & C
-	REG_MBK9=0x3000000F;
-
-	// WRAM-A fully mapped to arm7
-	*((vu32*)REG_MBK1)=0x8D898581; // same as dsiware
-
-	// WRAM-B fully mapped to arm9 // inverted order
-	*((vu32*)REG_MBK2)=0x8C888480;
-	*((vu32*)REG_MBK3)=0x9C989490;
-
-	// WRAM-C fully mapped to arm9 // inverted order
-	*((vu32*)REG_MBK4)=0x8C888480;
-	*((vu32*)REG_MBK5)=0x9C989490;
+	// Allow setting data from ARM9
+	REG_MBK9 = 0;
 
 	// WRAM mapped to the 0x3700000 - 0x37FFFFF area 
 	// WRAM-A mapped to the 0x3000000 - 0x303FFFF area : 256k
@@ -732,17 +715,23 @@ void initMBK() {
 
 void arm7_main (void) {
 	__dsimode = bootloader_data->dsiMode;
+	initMBK();
 
-	if((!my_isDSiMode()) && (!swiIsDebugger()))
+	while(arm9_stateFlag != ARM9_INIT);
+
+	arm9_stateFlag = ARM9_MBKSET;
+
+	while(arm9_stateFlag != ARM9_INIT);
+	// arm7 is master of WRAM-A, arm9 of WRAM-B & C
+	REG_MBK9=0x3000000F;
+
+	if((!isDSiMode()) && (!swiIsDebugger()))
 		bootloader_data->runCardEngine = false;
 
 	if(bootloader_data->cardEngineSize == 0)
 		bootloader_data->runCardEngine = false;
 
-	if (bootloader_data->runCardEngine) {
-		arm9_runCardEngine = bootloader_data->runCardEngine;
-		initMBK();
-	}
+	arm9_runCardEngine = bootloader_data->runCardEngine;
 
 	arm9_stateFlag = ARM9_CARDENGINE;
 
@@ -752,8 +741,6 @@ void arm7_main (void) {
 	while (arm9_stateFlag < ARM9_START);
 
 	debugOutput (ERR_STS_CLR_MEM);
-	
-	scfgRomBak = REG_SCFG_ROM;
 
 	// Get ARM7 to clear RAM
 	arm7_resetMemory();	
@@ -768,7 +755,7 @@ void arm7_main (void) {
 		debugOutput(errorCode);
 	}
 	
-	if (my_isDSiMode()) {
+	if (isDSiMode()) {
 		bootloader_data->twlTouch ? DSiTouchscreenMode() : NDSTouchscreenMode();
 		*(u16*)0x4000500 = 0x807F;
 
