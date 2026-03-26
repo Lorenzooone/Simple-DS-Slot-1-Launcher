@@ -20,7 +20,6 @@
 #include <nds.h>
 
 #include "load_bin.h"
-#include "loadAlt_bin.h"
 #include "cardengine_arm7_bin.h"
 #include "cardengine_arm7_isne_bin.h"
 #include "cardengine_arm7_dsi_exp_ram_bin.h"
@@ -34,7 +33,7 @@
 
 #define LCDC_BANK_D ((u16*)0x06860000)
 
-__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, uint32_t boot_type, char* boot_path, bool is_dsi_cart)
+__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, uint32_t boot_type, char* boot_path, bool is_dsi_cart)
 {
 	bool pass_min_font = true;
 	#ifndef DO_BOOTLOADER_DEBUG_PRINTS
@@ -51,7 +50,7 @@ __attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* laun
 			chosen_cardengine = cardengine_arm7_isne_bin;
 			chosen_cardengine_size = cardengine_arm7_isne_bin_size;
 		}
-		if(dsi_mode_enabled && is_dsi_cart && (launch_engine_data->twlmode != 0) && (!altBootloader)) {
+		if(dsi_mode_enabled && is_dsi_cart && (launch_engine_data->twlmode != 0)) {
 			chosen_cardengine = cardengine_arm7_dsi_exp_ram_bin;
 			chosen_cardengine_size = cardengine_arm7_dsi_exp_ram_bin_size;
 		}
@@ -61,8 +60,8 @@ __attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* laun
 	struct cardengine_main_data_t cardengine_data = (chosen_cardengine == NULL) ? base_empty_cardengine_data : *((struct cardengine_main_data_t*)chosen_cardengine);
 	cardengine_data.boot_type = boot_type;
 
-	const uint8_t* chosen_bootloader = altBootloader ? loadAlt_bin : load_bin;
-	size_t chosen_bootloader_size = altBootloader ? loadAlt_bin_size : load_bin_size;
+	const uint8_t* chosen_bootloader = load_bin;
+	size_t chosen_bootloader_size = load_bin_size;
 	struct bootloader_main_data_t load_data = *((struct bootloader_main_data_t*)chosen_bootloader);
 
 	// Set the parameters for the loader
@@ -109,15 +108,6 @@ __attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* laun
 		toncset(cardengine_target_ptr + cardengine_data.boot_path_offset, 0, cardengine_data.boot_path_max_len);
 
 	irqDisable(IRQ_ALL);
-
-	if ((isDSiMode()) && altBootloader) {
-		if (launch_engine_data->scfgUnlock) {
-			REG_SCFG_EXT = launch_engine_data->twlvram ? 0x8300E000 : 0x8300C000;
-		} else {
-			REG_SCFG_EXT = launch_engine_data->twlvram ? 0x83002000 : 0x83000000;
-			REG_SCFG_EXT &= ~(1UL << 31);
-		}
-	}
 
 	// Give the VRAM to the ARM7
 	VRAM_D_CR = VRAM_ENABLE | VRAM_D_ARM7_0x06020000;

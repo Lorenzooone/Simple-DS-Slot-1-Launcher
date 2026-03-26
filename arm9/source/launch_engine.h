@@ -46,7 +46,7 @@ struct launch_engine_data_t {
 	int redirectPowerButton;
 } PACKED ALIGNED(4);
 
-__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, bool altBootloader, uint32_t boot_type, char* boot_path, bool is_dsi_cart);
+__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, uint32_t boot_type, char* boot_path, bool is_dsi_cart);
 
 #ifdef __cplusplus
 }
