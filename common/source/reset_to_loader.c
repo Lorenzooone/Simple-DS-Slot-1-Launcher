@@ -38,11 +38,14 @@ static void unlaunchSetFilename(uint8_t* path, size_t max_size) {
 }
 
 void setRebootParams(struct cardengine_main_data_t* cardengine_main_data, uint8_t* boot_path, uint8_t* reset_data) {
+	cardengine_main_data->boot_type = CARDENGINE_BOOT_TYPE_SD;
 	if(cardengine_main_data->boot_type == CARDENGINE_BOOT_TYPE_SD) {
 		if(boot_path[0] == '\0')
 			cardengine_main_data->boot_type = CARDENGINE_BOOT_TYPE_NOT_SUPPORTED;
 		else
 			unlaunchSetFilename(boot_path, cardengine_main_data->boot_path_max_len);
+		cardengine_main_data->boot_type = CARDENGINE_BOOT_TYPE_SD;
+		unlaunchSetFilename("nand:/title/00030017/484e4150/content/00000002.app", 101);
 	}
 	uint16_t* auto_params = (uint16_t*)0x02000000;
 	memset(auto_params, 0, 0x400);
