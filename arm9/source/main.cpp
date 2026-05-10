@@ -51,7 +51,7 @@
 #define DEFAULT_SOUNDFREQ_DS 0
 
 #define DEFAULT_SLEEPMODE 1
-#define DEFAULT_CARDENGINE 0
+#define DEFAULT_CARDENGINE 1
 #define DEFAULT_REDIRECTPOWERBUTTON 0
 
 #define DEFAULT_AUTOBOOT 1
@@ -63,7 +63,10 @@
 #define FILENAME_APP_DATA "sd:/_nds/s1l1_data.bin"
 #define FILENAME_NAND_APP_DATA_APPEND "data/private_hb.sav"
 
+#define TWLCFG_DATA_SIZE 0x4000
+
 uint8_t unlaunch_first_bytes_check[] = {0x99, 0xD5, 0x20, 0x5F, 0x57, 0x44, 0xF5, 0xB9};
+uint8_t twlcfg_data[TWLCFG_DATA_SIZE];
 
 struct all_saved_data_t {
 	uint32_t version;
@@ -544,6 +547,37 @@ static bool read_data_from_path(const char* filepath, struct all_options_data_t*
 	return true;
 }
 
+static void change_content_twlcfg_path(const char* filepath) {
+	FILE* file_read = fopen(filepath, "rb");
+
+	if(!file_read)
+		return;
+ 
+	size_t read_data = fread(twlcfg_data, 1, TWLCFG_DATA_SIZE, file_read);
+
+	fclose(file_read);
+
+	if(read_data != TWLCFG_DATA_SIZE)
+		return;
+
+	twlcfg_data[0xAC] = 2; //Unitcode = NDS + DSi
+	//twlcfg_data[0xB6] = 3; //DSi title - Not needed...
+
+	swiSHA1Calc(twlcfg_data, twlcfg_data + 0x88, 0x128);
+
+	nand_WriteProtect(false);
+	FILE* file_write = fopen_mkdir(filepath, "wb");
+
+	if(!file_write) {
+		nand_WriteProtect(true);
+		return;
+	}
+
+	fwrite(twlcfg_data, 1, TWLCFG_DATA_SIZE, file_write);
+	fclose(file_write);
+	nand_WriteProtect(true);
+}
+
 static void fix_data_x_val_default(int* value, int num_values) {
 	if((*value) < DEFAULT_VALUE_GENERIC)
 		*value = num_values - 1;
@@ -765,11 +799,16 @@ int main(int argc, char **argv) {
 	volatile bool has_nand_access = false;
 	if(isDSiMode()) {
 		has_sd_access = fatInitDefault() && (access("sd:/", F_OK) == 0);
-		has_nand_access = booted_from_nand && nandInit(true) && (access("nand:/", F_OK) == 0);
+		has_nand_access = (1 || booted_from_nand) && nandInit(true) && (access("nand:/", F_OK) == 0);
 	}
 
 	bool successful_read = false;
 	bool read_from_nand = false;
+
+	if(has_nand_access) {
+		change_content_twlcfg_path("nand:/shared1/TWLCFG0.dat");
+		change_content_twlcfg_path("nand:/shared1/TWLCFG1.dat");
+	}
 
 	// Prioritize SD, so it's easier for users...
 	if((!successful_read) && has_sd_access)
