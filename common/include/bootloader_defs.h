@@ -12,7 +12,7 @@
 #define CARTRIDGETYPE_EMULATED 1
 #define CARTRIDGETYPE_RETAIL 0
 
-#define DO_BOOTLOADER_DEBUG_PRINTS
+//#define DO_BOOTLOADER_DEBUG_PRINTS
 
 struct bootloader_main_data_t {
 	const uint32_t first_jump;

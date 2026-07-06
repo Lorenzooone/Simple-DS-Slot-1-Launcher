@@ -521,14 +521,14 @@ void fullHeaderRead(sNDSHeaderExt* ndsHeader, u32* chipID, bool* chip_read, bool
 				(void*)headerData, 0x1000/sizeof(u32));
 		}
 		if (ndsHeader->dsi1[0]==0xFFFFFFFF && ndsHeader->dsi1[1]==0xFFFFFFFF
-		 && ndsHeader->dsi1[2]==0xFFFFFFFF && ndsHeader->dsi1[3]==0xFFFFFFFF) {
+		 && ndsHeader->icon_size==0xFFFFFFFF && ndsHeader->dsi1_1[0]==0xFFFFFFFF) {
 			toncset((u8*)headerData+0x200, 0, 0xE00);	// Clear out FFs
 		}
 		tonccpy(ndsHeader, headerData, 0x1000);
 	}
 }
 
-static void finalCardSetup(sNDSHeaderExt* ndsHeader, GameCode* gameCode, bool emulate_dsi, int* cartridgeType) {
+static void finalCardSetup(sNDSHeaderExt* ndsHeader, GameCode* gameCode, bool emulate_dsi, bool do_banner_read, int* cartridgeType) {
     //CycloDS doesn't like the dsi secure area being decrypted
     if ((ndsHeader->arm9romOffset != 0x4000) || secureArea[0] || secureArea[1]) {
 		decryptSecureArea (gameCode->key, secureArea, NTR_CARD_KEY);
@@ -557,17 +557,35 @@ static void finalCardSetup(sNDSHeaderExt* ndsHeader, GameCode* gameCode, bool em
 			cardParamCommand (CARD_CMD_DATA_MODE, 0, CARD_ACTIVATE, NULL, 0);
 	}
 
-	/*
-	uint32_t dummy[0x200 / sizeof(uint32_t)];
-	cardParamCommand (CARD_CMD_DATA_READ, ndsHeader->romSize & (~0x1FF),
-		portFlags | CARD_ACTIVATE | CARD_nRESET | CARD_BLK_SIZE(1),
-		dummy, 0x200 / sizeof(uint32_t));
-	size_t icon_size = 0x0A00;
-	for(int i = 0; i < icon_size / 0x200; i++)
-		cardParamCommand (CARD_CMD_DATA_READ, (ndsHeader->bannerOffset & (~0x1FF)) + (i * 0x200),
-		portFlags | CARD_ACTIVATE | CARD_nRESET | CARD_BLK_SIZE(1),
-		dummy, 0x200 / sizeof(uint32_t));
-	*/
+	// Increases compatibility with certain flashcarts...
+	if(do_banner_read) {
+		uint32_t dummy[0x200 / sizeof(uint32_t)];
+
+		// Read the end of ROM... DS does it before reading the icon...
+		if(!emulate_dsi)
+			cardParamCommand (CARD_CMD_DATA_READ, ndsHeader->romSize & (~0x1FF),
+				portFlags | CARD_ACTIVATE | CARD_nRESET | CARD_BLK_SIZE(1),
+				dummy, 0x200 / sizeof(uint32_t));
+
+		size_t icon_size = 0x0A00;
+		// DSi BIOS seems to always read 0x2400 bytes,
+		// even when 0x840 is specified...?
+		// For now, respect the wishes of the header...
+		// Should this be under emulate_dsi...?
+		if(ROMsupportsDsiMode(ndsHeader))
+			icon_size = ((ndsHeader->icon_size + 0x1FF) >> 9) << 9;
+
+		for(int i = 0; i < icon_size / 0x200; i++)
+			cardParamCommand (CARD_CMD_DATA_READ, (ndsHeader->bannerOffset & (~0x1FF)) + (i * 0x200),
+				portFlags | CARD_ACTIVATE | CARD_nRESET | CARD_BLK_SIZE(1),
+				dummy, 0x200 / sizeof(uint32_t));
+
+		// Read the end of ROM... DSi does it after reading the icon...
+		if(emulate_dsi)
+			cardParamCommand (CARD_CMD_DATA_READ, ndsHeader->romSize & (~0x1FF),
+				portFlags | CARD_ACTIVATE | CARD_nRESET | CARD_BLK_SIZE(1),
+				dummy, 0x200 / sizeof(uint32_t));
+	}
 }
 
 int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, int* cartridgeType)
@@ -575,6 +593,7 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, int* cartrid
 	u32 portFlagsKey1, portFlagsSecRead;
 	bool chip_read = false;
 	bool emulate_dsi = false;
+	bool do_banner_read = true;
 	twlBlowfish = false;
 	normalChip = false;	// As defined by GBAtek, normal chip secure area is accessed in blocks of 0x200, other chip in blocks of 0x1000
 	int secureBlockNumber;
@@ -644,7 +663,7 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, int* cartrid
 	cardPolledTransfer((ndsHeader->cardControl13 & (CARD_WR|CARD_nRESET|CARD_CLK_SLOW)) | CARD_ACTIVATE, NULL, 0, cmdData);
 
 	if((*cartridgeType) == CARTRIDGETYPE_EMULATED) {
-		finalCardSetup(ndsHeader, gameCode, emulate_dsi, cartridgeType);
+		finalCardSetup(ndsHeader, gameCode, emulate_dsi, do_banner_read, cartridgeType);
 		return ERR_NONE;
 	}
 
@@ -706,7 +725,7 @@ int cardInit (sNDSHeaderExt* ndsHeader, u32* chipID, bool do_reset, int* cartrid
     }
 	cardPolledTransfer(portFlagsKey1, NULL, 0, cmdData);
 
-	finalCardSetup(ndsHeader, gameCode, emulate_dsi, cartridgeType);
+	finalCardSetup(ndsHeader, gameCode, emulate_dsi, do_banner_read, cartridgeType);
 
 	return ERR_NONE;
 }
