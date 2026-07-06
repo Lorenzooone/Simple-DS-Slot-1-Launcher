@@ -65,15 +65,15 @@ int main(void) {
 
 	irqEnable( IRQ_VBLANK | IRQ_VCOUNT);
 
-	uint16_t debugger_value = 0;
+	uint16_t devunit_value = 0;
 	uint8_t is_3ds = 0;
 	if (isDSiMode()) {
 		i2cWriteRegister(0x4A, 0x12, 0x00);		// Press power-button for auto-reset
 		i2cWriteRegister(0x4A, 0x70, 0x01);		// Bootflag = Warmboot/SkipHealthSafety
-		debugger_value = *((volatile uint16_t*)0x04004024);
+		devunit_value = *((volatile uint16_t*)0x04004024);
 		is_3ds = is_device_3ds() ? 1 : 0;
 	}
-	fifoSendValue32(FIFO_USER_01, debugger_value | (is_3ds << (sizeof(debugger_value) * 8)));
+	fifoSendValue32(FIFO_USER_01, devunit_value | (is_3ds << (sizeof(devunit_value) * 8)));
 	
 	while (1) {
 		swiWaitForVBlank();

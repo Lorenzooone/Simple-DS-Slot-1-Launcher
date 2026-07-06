@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/*
 #ifdef __cplusplus
     #ifndef _Static_assert
         #define _Static_assert static_assert
@@ -11,7 +12,6 @@
 #define STATIC_ASSERT(test_for_true) \
     _Static_assert((test_for_true), "(" #test_for_true ") failed")
 
-/*
 static uint32_t curr_payload_pos = 0x02200000;
 
 static void write_le32(volatile uint8_t* ptr, uint32_t value) {
@@ -44,8 +44,10 @@ static void create_connection_to_pos(volatile uint8_t* write_pos, uintptr_t jump
 */
 
 void insert_arm9_payload() {
+
 	/*
 	//ARM9
+	// The most recent payload
 	#define NUM_CONNECT_INST 1
 	#define NUM_INST (41 + NUM_CONNECT_INST)
 
@@ -55,6 +57,7 @@ void insert_arm9_payload() {
 	// Returns back
 	0xE12FFF1E};
 	*/
+
 	/*
 	uint32_t instructions[NUM_INST] = {0xE92D0003, 0xE3A00301, 0xE3A00301, 0xE3A00301, 0xE3A01801, 0xE2811EF1, 0xE5801000, 0xE2800A01, 0xE5801000, 0xE280006C, 0xE3A01000, 0xE5801000, 0xE2400A01, 0xE5801000, 0xE3A01405, 0xE3A0001F, 0xE1C100B0, 0xE2811B01, 0xE1C100B0, 0xE3A01301, 0xE2811E13, 0xE5910000, 0xE2000001, 0xE3500001, 0x0AFFFFFB, 0xE3A01405, 0xE3A00B1F, 0xE1C100B0, 0xE2811B01, 0xE1C100B0, 0xE8BD0003,
 	// End of payload, place instructions to connect back below...
@@ -73,7 +76,9 @@ void insert_arm9_payload() {
 	// Returns back
 	0xE12FFF1E};
 	*/
+
 	/*
+	// The most recent connector
 	#define NUM_CONNECT_COPY_INST 1
 	#define NUM_COPY_INST (8 + NUM_CONNECT_COPY_INST)
 	uint32_t instructions_copy_payload[NUM_COPY_INST] = {0, 0, 0xE92D0003, 0xE51F0010, 0xE51F1018, 0xE5801000, 0xE8BD0003,
@@ -89,15 +94,15 @@ void insert_arm9_payload() {
 		write_le32(payload_pos + (i * 4), instructions[i]);
 	for(int i = 0; i < NUM_COPY_INST; i++)
 		write_le32(payload_copy_pos + (i * 4), instructions_copy_payload[i]);
-	volatile uint8_t* copy_jump_pos = (volatile uint8_t*)0x020008F0;
-	volatile uint8_t* jump_pos = (volatile uint8_t*)0x020D7C2C;
+	volatile uint8_t* copy_jump_pos = (volatile uint8_t*)0x0200497C;
+	volatile uint8_t* jump_pos = (volatile uint8_t*)0x0200512A;
 	//volatile uint8_t* jump_pos = (volatile uint8_t*)0x0225E680;
 	volatile uint8_t* cmp_target_pos = (volatile uint8_t*)0x02215BE0;
-	volatile uint32_t cmp_expected = (volatile uint8_t*)0xE59F000D;
+	volatile uint32_t cmp_expected = (volatile uint32_t)0xE59F000D;
 	//create_connection_to_pos(jump_pos, jump_pos, payload_pos, false);
-	create_connection_to_pos(copy_jump_pos, copy_jump_pos, payload_copy_pos + 8, false);
-	create_connection_to_pos(payload_copy_pos, jump_pos, payload_pos, false);
-	write_le32(payload_copy_pos + 4, jump_pos);
+	create_connection_to_pos(copy_jump_pos, (uintptr_t)copy_jump_pos, (uintptr_t)payload_copy_pos + 8, false);
+	create_connection_to_pos(payload_copy_pos, (uintptr_t)jump_pos, (uintptr_t)payload_pos, true);
+	write_le32(payload_copy_pos + 4, (uintptr_t)jump_pos);
 	//write_le32(payload_pos + (4 * POS_PAYLOAD_LOAD_ADDR), cmp_target_pos);
 	//write_le32(payload_pos + (4 * POS_PAYLOAD_CMP_ADDR), cmp_expected);
 	*/
@@ -175,14 +180,15 @@ void insert_arm7_payload() {
 	};
 	*/
 	/*
+	// The most recent payload
+	// Stop/Sleep
 	#define NUM_CONNECT_INST 0
 	#define NUM_INST (2 + NUM_CONNECT_INST)
 	uint32_t instructions[NUM_INST] = {0xEF070000, 0xEAFFFFFD
 	// End of payload, place instructions to connect back below...
 	// Returns back
 	};
-	*/
-	/*
+
 	#define NUM_CONNECT_COPY_COPY_INST 1
 	#define NUM_COPY_COPY_INST (8 + NUM_CONNECT_COPY_COPY_INST)
 	uint32_t instructions_copy_copy_payload[NUM_COPY_COPY_INST] = {0xEAFFFFFE, 0, 0xE92D0003, 0xE51F0010, 0xE51F1018, 0xE5801000, 0xE8BD0003,
@@ -212,16 +218,17 @@ void insert_arm7_payload() {
 		write_le32(payload_copy_copy_pos + (i * 4), instructions_copy_copy_payload[i]);
 	volatile uint8_t* copy_copy_jump_pos = (volatile uint8_t*)0x02380104;
 	volatile uint8_t* copy_jump_pos = (volatile uint8_t*)0x037F8010;
-	volatile uint8_t* jump_pos = (volatile uint8_t*)0x03807B04;
+	volatile uint8_t* jump_pos = (volatile uint8_t*)0x037F8050;
 	//volatile uint32_t cmp_expected = (volatile uint8_t*)0x82EA4807;
-	volatile uint32_t cmp_expected = (volatile uint8_t*)0x82EA4807;
+	volatile uint32_t cmp_expected = (uintptr_t)0x82EA4807;
 	//create_connection_to_pos(jump_pos, jump_pos, payload_pos, false);
 	//create_connection_to_pos(copy_copy_jump_pos, copy_copy_jump_pos, payload_copy_copy_pos + 8, false);
 	//create_connection_to_pos(payload_copy_copy_pos, copy_jump_pos, payload_copy_pos + 8, false);
 	//write_le32(payload_copy_copy_pos + 4, copy_jump_pos);
-	create_connection_to_pos(copy_copy_jump_pos, copy_copy_jump_pos, payload_copy_copy_pos + 8, false);
+	create_connection_to_pos(copy_copy_jump_pos, (uintptr_t)copy_copy_jump_pos, (uintptr_t)payload_copy_copy_pos + 8, false);
 	//create_connection_to_pos(payload_copy_pos, jump_pos, payload_pos, false);
-	write_le32(payload_copy_copy_pos + 4, jump_pos);
+	create_connection_to_pos(payload_copy_copy_pos, (uintptr_t)jump_pos, (uintptr_t)payload_pos, false);
+	write_le32(payload_copy_copy_pos + 4, (uintptr_t)jump_pos);
 	//write_le32(payload_pos + (4 * POS_PAYLOAD_CMP_ADDR), cmp_expected);
 	//write_le32(payload_pos + (4 * POS_PAYLOAD_NUM_ADDR), payload_pos + (4 * (POS_PAYLOAD_NUM_ADDR + 1)));
 	*/

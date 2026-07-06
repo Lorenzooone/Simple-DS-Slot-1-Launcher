@@ -113,7 +113,6 @@ static module_params_t* moduleParams;
 // Important things
 #define NDS_HEADER         0x027FFE00
 #define NDS_HEADER_SDK5    0x02FFFE00 // __NDSHeader
-#define NDS_HEADER_POKEMON 0x027FF000
 
 #define DSI_HEADER         0x027FE000
 #define DSI_HEADER_SDK5    0x02FFE000 // __DSiHeader
@@ -136,14 +135,14 @@ static void errorOutput (u32 code) {
 }
 */
 
-/*
+#ifdef DO_BOOTLOADER_DEBUG_PRINTS
 static void showAddress(uintptr_t address) {
 	while(arm9_stateFlag != ARM9_READY);
 	arm9_addressToShow = address;
 	arm9_stateFlag = ARM9_PRINT_MEM;
 	while (arm9_stateFlag != ARM9_READY);
 }
-*/
+#endif
 
 static void debugOutput (u32 code) {
 	// Wait until the ARM9 is ready
@@ -413,6 +412,13 @@ void arm7_resetMemory (void)
 	REG_IPC_FIFO_CR = IPC_FIFO_ENABLE | IPC_FIFO_SEND_CLEAR;
 	REG_IPC_FIFO_CR = 0;
 
+	volatile uint32_t* debug_handler_arm9 = (volatile uint32_t*)0x02FFFD9C;
+	volatile uint32_t* debug_handler_arm7 = (volatile uint32_t*)0x0380FFDC;
+	volatile uint32_t* debug_gba_pos_comms = (volatile uint32_t*)0x027FFF7C;
+	uint32_t registered_debug_handler_arm9 = *debug_handler_arm9;
+	uint32_t registered_debug_handler_arm7 = *debug_handler_arm7;
+	uint32_t registered_debug_gba_pos_comms = *debug_gba_pos_comms;
+
 	if (isDSiMode()) {
 		memset_addrs_arm7(0x03000000, 0x0380FFC0);
 		memset_addrs_arm7(0x0380FFD0, 0x03800000 + 0x10000);
@@ -427,13 +433,31 @@ void arm7_resetMemory (void)
 	// clear more of EXRAM, skipping the cheat data section
 	toncset ((void*)0x023F8000, 0, 0x10000 - CHEAT_DATA_SIZE);
 
-	if(isDSiMode() || swiIsDebugger())
-		memset_addrs_arm7(0x02400000, 0x02800000); // Clear the rest of EXRAM
+	if((!isDSiMode()) && bootloader_data->hasDoubleRAM) {
+		memset_addrs_arm7(0x02400000, 0x02700000); // Clear the start of debug EXRAM
+		if(bootloader_data->removeDebuggerMonitor)
+			memset_addrs_arm7(0x02700000, 0x02780000); // Clear the debugger monitor area
+		memset_addrs_arm7(0x02780000, 0x02800000); // Clear the ending part of debug EXRAM
+	}
 
 	if (isDSiMode()) {
 		// clear last part of EXRAM
-		memset_addrs_arm7(0x02800000, 0x02FFD7BC); // Leave eMMC CID intact
+		memset_addrs_arm7(0x02400000, 0x02FFD7BC); // Leave eMMC CID intact
 		memset_addrs_arm7(0x02FFD7CC, 0x03000000);
+		if(bootloader_data->hasDoubleRAM) {
+			memset_addrs_arm7(0x0D000000, 0x0DF00000); // Clear start of extra RAM
+			if(bootloader_data->removeDebuggerMonitor)
+				memset_addrs_arm7(0x0DF00000, 0x0DFC0000); // Clear the debugger monitor area
+			memset_addrs_arm7(0x0DFC0000, 0x0E000000); // Clear ending part of extra RAM
+			*((volatile uint8_t*)0xDFFFFFA) = 0xAA; // Double RAM handshake
+		}
+	}
+
+	if(!bootloader_data->removeDebuggerMonitor) {
+		*debug_handler_arm9 = registered_debug_handler_arm9; // Set back the debug handler
+		*debug_handler_arm7 = registered_debug_handler_arm7; // Set back the debug handler
+		if(!isDSiMode())
+			*debug_gba_pos_comms = registered_debug_gba_pos_comms; // Set back the GBA comms buffer position, for ISNEs
 	}
 
 	REG_IE = 0;
@@ -771,32 +795,18 @@ int arm7_loadBinary (const tDSiHeader* dsiHeaderTemp) {
 	u32 errorCode;
 	
 	// Init card
-	errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, false);
+	errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, false, (int*)&bootloader_data->cartridgeType);
 	// Try salvaging it...
 	if(errorCode)
-		errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, true);
+		errorCode = cardInit((sNDSHeaderExt*)dsiHeaderTemp, &chipID, true, (int*)&bootloader_data->cartridgeType);
 	// No way to do this. Return
 	if(errorCode)
 		return errorCode;
 
-	// This currently does absolutely nothing?!
-	/*
-	// Fix Pokemon games needing header data.
-	tonccpy((u32*)NDS_HEADER_POKEMON, (u32*)NDS_HEADER, 0x170);
-
-	char* romTid = (char*)NDS_HEADER_POKEMON+0xC;
-	if (
-		memcmp(romTid, "ADA", 3) == 0    // Diamond
-		|| memcmp(romTid, "APA", 3) == 0 // Pearl
-		|| memcmp(romTid, "CPU", 3) == 0 // Platinum
-		|| memcmp(romTid, "IPK", 3) == 0 // HG
-		|| memcmp(romTid, "IPG", 3) == 0 // SS
-	) {
-		// Make the Pokemon game code ADAJ.
-		const char gameCodePokemon[] = { 'A', 'D', 'A', 'J' };
-		tonccpy((char*)NDS_HEADER_POKEMON+0xC, gameCodePokemon, 4);
-	}
-	*/
+	// The BIOS does this on debuggers before launching the games...
+	// Do not do this when dumping!
+	if(bootloader_data->cartridgeType == CARTRIDGETYPE_EMULATED)
+		((sNDSHeaderExt*)dsiHeaderTemp)->cardControl13 &= ~(CARD_SEC_CMD | CARD_SEC_EN | CARD_SEC_DAT | CARD_SEC_SEED);
 
 	cardReadDirect(dsiHeaderTemp->ndshdr.arm9romOffset, (u8*)dsiHeaderTemp->ndshdr.arm9destination, dsiHeaderTemp->ndshdr.arm9binarySize);
 	cardReadDirect(dsiHeaderTemp->ndshdr.arm7romOffset, (u8*)dsiHeaderTemp->ndshdr.arm7destination, dsiHeaderTemp->ndshdr.arm7binarySize);
@@ -829,6 +839,15 @@ Jumps to the ARM7 NDS binary in sync with the display and ARM9
 Written by Darkain, modified by Chishm.
 --------------------------------------------------------------------------*/
 void arm7_startBinary (void) {
+
+	#ifdef DO_BOOTLOADER_DEBUG_PRINTS
+	//showAddress((uintptr_t)0x27FFD80);
+	//showAddress(*((uintptr_t*)0x27FFD9C));
+	showAddress((uintptr_t)ndsHeader->arm9destination);
+	showAddress((uintptr_t)ndsHeader->arm7destination);
+	//showAddress(0x0DF00000);
+	#endif
+
 	// Get the ARM9 to boot
 	arm9_stateFlag = ARM9_BOOTBIN;
 	while(arm9_stateFlag != ARM9_READY);
@@ -1117,7 +1136,11 @@ void arm7_main (void) {
 	arm9_extendedMemory = (dsiModeConfirmed || (isDSiMode() && isDSBrowser));
 	if (!arm9_extendedMemory) {
 		tonccpy((u32*)0x023FF000, (u32*)base_dsi_info_addr, 0x1000);
+		if(base_dsi_info_addr != DSI_INFO_BASE_ADDR)
+			tonccpy((u32*)DSI_INFO_BASE_ADDR, (u32*)base_dsi_info_addr, 0x1000);
 	}
+	// Needed for debugging...
+	arm9_extendedMemory = arm9_extendedMemory || (isDSiMode() && (!bootloader_data->removeDebuggerMonitor) && bootloader_data->isOnDebugger);
 
 	if (isDSiMode()) {
 		if (dsiModeConfirmed) {
@@ -1179,7 +1202,7 @@ void arm7_main (void) {
 		bootloader_data->runCardEngine = false;
 
 	// Does not currently work for DSi games launched in DSi mode on a 16 MB DSis
-	if(((!isDSiMode()) && (!swiIsDebugger())) || (dsiModeConfirmed && ROMsupportsDsiMode(ndsHeader) && (!bootloader_data->hasDoubleRAM)))
+	if(((!isDSiMode()) && (!bootloader_data->hasDoubleRAM)) || (dsiModeConfirmed && ROMsupportsDsiMode(ndsHeader) && (!bootloader_data->hasDoubleRAM)))
 		bootloader_data->runCardEngine = false;
 
 	if(bootloader_data->cardEngineSize == 0)

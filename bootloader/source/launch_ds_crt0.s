@@ -48,7 +48,15 @@ sleepMode:
 	.word	0x00000000
 readPowerButton:
 	.word	0x00000000
+cartridgeType:
+	.word	0x00000000
+removeDebuggerMonitor:
+	.word	0x00000000
 isRAMDoubled:
+	.word	0x00000000
+isOn3DS:
+	.word	0x00000000
+isOnDebugger:
 	.word	0x00000000
 cardEngineLocation:
 	.word	0x00000000

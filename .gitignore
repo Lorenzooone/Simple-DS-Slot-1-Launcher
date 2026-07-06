@@ -34,6 +34,7 @@ cp_tad_to_emu_sdfiles.sh
 convert_cartridge.sh
 convert_to_usable_cartridge.sh
 cp_nds_to_ortin.sh
+make_and_copy_to_shared_folder.sh
 settings.sh
 __pycache__/
 run_reset_save.sh

@@ -70,6 +70,7 @@ ARM7DIR		:= arm7
 # --------------
 
 ROM					:= $(NAME).nds
+ROM_ds_only			:= $(NAME)_ds_only.nds
 ROM_dsi				:= $(NAME).dsi
 ROM_dsi_cartridge	:= $(NAME)_cartridge.dsi
 ROM_homebrew		:= $(NAME)_homebrew.nds
@@ -79,7 +80,7 @@ ROM_homebrew		:= $(NAME)_homebrew.nds
 
 .PHONY: all clean cartridge arm9 arm7 cardengine_arm7 bootloader dldipatch sdimage
 
-all: $(ROM) $(ROM_dsi) $(ROM_dsi_cartridge) $(ROM_homebrew)
+all: $(ROM) $(ROM_dsi) $(ROM_dsi_cartridge) $(ROM_homebrew) $(ROM_ds_only)
 
 clean:
 	@echo "  CLEAN"
@@ -89,7 +90,7 @@ clean:
 	$(V)$(MAKE) -C cardengine_arm7 clean --no-print-directory
 	$(V)$(MAKE) -C cardengine_arm7 -f Makefile.isne clean --no-print-directory
 	$(V)$(MAKE) -C cardengine_arm7 -f Makefile.dsi_exp clean --no-print-directory
-	$(V)$(RM) $(ROM) $(ROM_dsi) $(ROM_dsi_cartridge) $(ROM_homebrew) build $(SDIMAGE)
+	$(V)$(RM) $(ROM) $(ROM_dsi) $(ROM_dsi_cartridge) $(ROM_ds_only) $(ROM_homebrew) build $(SDIMAGE)
 
 arm9: cardengine_arm7 cardengine_isne_arm7 cardengine_dsi_exp_arm7 bootloader
 	$(V)+$(MAKE) -C arm9 --no-print-directory
@@ -144,6 +145,11 @@ $(ROM_dsi): arm9 arm7
 		-g ${GAMECODE} ${GAMEGROUPID} "${GAMEDATATITLE}" -z 93FFFB06h -u 00030004 -a 00000038 \
 		$(NDSTOOL_FAT)
 	$(PYTHON_CMD) nds_change_latencies.py $@ 00416657 081808F8 0D7E
+	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@
+
+$(ROM_ds_only): $(ROM_dsi)
+	cp $(ROM_dsi) $@
+	$(PYTHON_CMD) nds_change_unitcode.py $@ 0
 	$(V)$(BLOCKSDS)/tools/ndstool/ndstool -fh $@
 
 $(ROM_dsi_cartridge): $(ROM_dsi)

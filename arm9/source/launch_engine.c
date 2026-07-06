@@ -33,15 +33,21 @@
 
 #define LCDC_BANK_D ((u16*)0x06860000)
 
-__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, uint32_t boot_type, char* boot_path, bool is_dsi_cart)
+static void set_ram_mode(uint8_t mode) {
+	REG_SCFG_EXT = (REG_SCFG_EXT & ~(SCFG_EXT_RAM_DEBUG | SCFG_EXT_RAM_TWL)) | ((mode & 3) << 14);
+}
+
+__attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* launch_engine_data, uint32_t boot_type, char* boot_path, bool is_dsi_cart, bool is_3ds, bool is_on_debugger)
 {
 	bool pass_min_font = true;
 	#ifndef DO_BOOTLOADER_DEBUG_PRINTS
 	pass_min_font = false;
 	#endif
-	int dsi_mode_enabled = 1;
-	if(!isDSiMode())
-		dsi_mode_enabled = 0;
+	int dsi_mode_enabled = 0;
+	if(isDSiMode()) {
+		dsi_mode_enabled = 1;
+		set_ram_mode(3);
+	}
 
 	const uint8_t* chosen_cardengine = dsi_mode_enabled ? cardengine_arm7_bin : NULL;
 	size_t chosen_cardengine_size = dsi_mode_enabled ? cardengine_arm7_bin_size : 0;
@@ -77,7 +83,11 @@ __attribute__((noreturn)) void runLaunchEngine(struct launch_engine_data_t* laun
 	load_data.runCardEngine = launch_engine_data->runCardEngine;
 	load_data.sleepMode = launch_engine_data->sleepMode;
 	load_data.redirectPowerButton = launch_engine_data->redirectPowerButton;
-	load_data.hasDoubleRAM = isRAMDoubled();
+	load_data.cartridgeType = launch_engine_data->cartridge_read_type;
+	load_data.removeDebuggerMonitor = launch_engine_data->remove_debugger_monitor;
+	load_data.hasDoubleRAM = isRAMDoubled() ? 1 : 0;
+	load_data.is3DS = is_3ds ? 1 : 0;
+	load_data.isOnDebugger = is_on_debugger ? 1 : 0;
 	load_data.cardEngineLocation = ((load_data.copy_end + 3) >> 2) << 2;
 	load_data.cardEngineSize = chosen_cardengine_size;
 	for(size_t i = 0; i < 8; i++)

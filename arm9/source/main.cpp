@@ -28,11 +28,12 @@
 #include "launch_engine.h"
 #include "old_launch_engine_structs.h"
 #include "cardengine_defs.h"
+#include "bootloader_defs.h"
 #include "utils.h"
 
-#define VERSION_STR "1.4.1.6"
+#define VERSION_STR "1.4.1.7"
 
-#define SAVED_VERSION 0x01020000
+#define SAVED_VERSION 0x01030000
 
 #define DEFAULT_SCFGUNLOCK_DSI 1
 #define DEFAULT_SDACCESS_DSI 1
@@ -53,6 +54,7 @@
 #define DEFAULT_SLEEPMODE 1
 #define DEFAULT_CARDENGINE 0
 #define DEFAULT_REDIRECTPOWERBUTTON 0
+#define DEFAULT_REMOVEDEBUGGERMONITOR 0
 
 #define DEFAULT_AUTOBOOT 1
 
@@ -83,10 +85,14 @@ struct all_saved_data_t_1_1 {
 	int autoboot;
 } PACKED ALIGNED(4);
 
+struct all_saved_data_t_1_2 {
+	uint32_t version;
+	struct launch_engine_data_t_1_2 launch_engine_data;
+	int autoboot;
+} PACKED ALIGNED(4);
+
 struct all_options_data_t {
 	struct all_saved_data_t all_saved_data;
-	int reset_to_ds_mode;
-	int reset_to_dsi_mode;
 	int reset_to_defaults;
 	int save_to_filepath;
 	int cursor_index;
@@ -99,60 +105,134 @@ char padding[0x200 - sizeof(sNDSHeader)];
 
 struct all_options_data_t all_options_data;
 
-int *settings_options_dsi[] = {
-	&all_options_data.all_saved_data.launch_engine_data.twlmode,
-	&all_options_data.all_saved_data.launch_engine_data.twlclk,
-	&all_options_data.all_saved_data.launch_engine_data.twlvram,
-	&all_options_data.all_saved_data.launch_engine_data.twltouch,
-	&all_options_data.all_saved_data.launch_engine_data.language,
-	&all_options_data.all_saved_data.launch_engine_data.soundFreq,
-	&all_options_data.all_saved_data.launch_engine_data.sdaccess,
-	&all_options_data.all_saved_data.launch_engine_data.scfgUnlock,
-	&all_options_data.all_saved_data.launch_engine_data.runCardEngine,
-	&all_options_data.all_saved_data.launch_engine_data.sleepMode,
-	&all_options_data.all_saved_data.autoboot,
-	&all_options_data.all_saved_data.launch_engine_data.redirectPowerButton,
-	&all_options_data.save_to_filepath,
-	&all_options_data.reset_to_dsi_mode,
-	&all_options_data.reset_to_ds_mode,
-	&all_options_data.reset_to_defaults,
+struct option_menu_data_t {
+	int* setting_ptr = NULL;
+	bool ds_usable;
+	bool dsi_usable;
+	bool _3ds_usable;
+	bool debugger_specific;
 };
 
-int *settings_options_3ds[] = {
-	&all_options_data.all_saved_data.launch_engine_data.twlmode,
-	&all_options_data.all_saved_data.launch_engine_data.twlclk,
-	&all_options_data.all_saved_data.launch_engine_data.twlvram,
-	&all_options_data.all_saved_data.launch_engine_data.twltouch,
-	&all_options_data.all_saved_data.launch_engine_data.language,
-	&all_options_data.all_saved_data.launch_engine_data.soundFreq,
-	&all_options_data.all_saved_data.launch_engine_data.sdaccess,
-	&all_options_data.all_saved_data.launch_engine_data.scfgUnlock,
-	&all_options_data.all_saved_data.launch_engine_data.runCardEngine,
-	&all_options_data.all_saved_data.launch_engine_data.sleepMode,
-	&all_options_data.all_saved_data.autoboot,
-	&all_options_data.save_to_filepath,
-	&all_options_data.reset_to_dsi_mode,
-	&all_options_data.reset_to_ds_mode,
-	&all_options_data.reset_to_defaults,
+const option_menu_data_t twlmode_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.twlmode,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
 };
 
-int *settings_options_ds[] = {
-	&all_options_data.all_saved_data.launch_engine_data.sleepMode,
-	&all_options_data.all_saved_data.launch_engine_data.language,
-	&all_options_data.reset_to_defaults,
+const option_menu_data_t twlclk_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.twlclk,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
 };
 
-int *settings_options_isne[] = {
-	&all_options_data.all_saved_data.launch_engine_data.sleepMode,
-	&all_options_data.all_saved_data.launch_engine_data.language,
-	&all_options_data.all_saved_data.launch_engine_data.runCardEngine,
-	&all_options_data.reset_to_defaults,
+const option_menu_data_t twlvram_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.twlvram,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
 };
 
-#define NUM_SETTINGS_OPTIONS_DSI (sizeof(settings_options_dsi) / sizeof(settings_options_dsi[0]))
-#define NUM_SETTINGS_OPTIONS_3DS (sizeof(settings_options_3ds) / sizeof(settings_options_3ds[0]))
-#define NUM_SETTINGS_OPTIONS_DS (sizeof(settings_options_ds) / sizeof(settings_options_ds[0]))
-#define NUM_SETTINGS_OPTIONS_ISNE (sizeof(settings_options_isne) / sizeof(settings_options_isne[0]))
+const option_menu_data_t twltouch_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.twltouch,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t language_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.language,
+	.ds_usable = true, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t soundFreq_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.soundFreq,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t sdaccess_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.sdaccess,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t scfgUnlock_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.scfgUnlock,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t runCardEngine_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.runCardEngine,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t runCardEngineISNE_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.runCardEngine,
+	.ds_usable = true, .dsi_usable = false, ._3ds_usable = false,
+	.debugger_specific = true
+};
+
+const option_menu_data_t sleepMode_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.sleepMode,
+	.ds_usable = true, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t autoboot_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.autoboot,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t redirectPowerButton_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.redirectPowerButton,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = false,
+	.debugger_specific = false
+};
+
+const option_menu_data_t save_to_filepath_option_menu_data = {
+	.setting_ptr = &all_options_data.save_to_filepath,
+	.ds_usable = false, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t reset_to_defaults_option_menu_data = {
+	.setting_ptr = &all_options_data.reset_to_defaults,
+	.ds_usable = true, .dsi_usable = true, ._3ds_usable = true,
+	.debugger_specific = false
+};
+
+const option_menu_data_t cartridge_read_type_option_menu_data = {
+	.setting_ptr = &all_options_data.all_saved_data.launch_engine_data.cartridge_read_type,
+	.ds_usable = true, .dsi_usable = true, ._3ds_usable = false,
+	.debugger_specific = true
+};
+
+const option_menu_data_t* settings_list[] = {
+	&twlmode_option_menu_data,
+	&twlclk_option_menu_data,
+	&twlvram_option_menu_data,
+	&twltouch_option_menu_data,
+	&language_option_menu_data,
+	&soundFreq_option_menu_data,
+	&sdaccess_option_menu_data,
+	&scfgUnlock_option_menu_data,
+	&runCardEngine_option_menu_data,
+	&sleepMode_option_menu_data,
+	&autoboot_option_menu_data,
+	&redirectPowerButton_option_menu_data,
+	&runCardEngineISNE_option_menu_data,
+	&cartridge_read_type_option_menu_data,
+	&save_to_filepath_option_menu_data,
+	&reset_to_defaults_option_menu_data
+};
+
+#define NUM_TOTAL_POSSIBLE_SETTINGS (sizeof(settings_list) / sizeof(settings_list[0]))
+
+int* available_settings[NUM_TOTAL_POSSIBLE_SETTINGS];
+size_t num_available_settings;
+
 #define SETTING_OPTIONS_VALUE_X_POSITION 19
 #define PRINT_FUNCTION printf
 #define NUM_LANGUAGES_DS 7
@@ -170,6 +250,8 @@ void reset_launch_engine_data_to_dsx(struct launch_engine_data_t* launch_engine_
 	launch_engine_data->sleepMode = DEFAULT_SLEEPMODE;
 	launch_engine_data->runCardEngine = DEFAULT_CARDENGINE;
 	launch_engine_data->redirectPowerButton = DEFAULT_REDIRECTPOWERBUTTON;
+	launch_engine_data->cartridge_read_type = DEFAULT_VALUE_GENERIC;
+	launch_engine_data->remove_debugger_monitor = DEFAULT_REMOVEDEBUGGERMONITOR;
 }
 
 void reset_all_saved_data(struct all_saved_data_t* all_saved_data) {
@@ -185,15 +267,15 @@ void reset_all_saved_data(struct all_saved_data_t* all_saved_data) {
 	all_saved_data->launch_engine_data.sleepMode = DEFAULT_SLEEPMODE;
 	all_saved_data->launch_engine_data.runCardEngine = DEFAULT_CARDENGINE;
 	all_saved_data->launch_engine_data.redirectPowerButton = DEFAULT_REDIRECTPOWERBUTTON;
+	all_saved_data->launch_engine_data.cartridge_read_type = DEFAULT_VALUE_GENERIC;
+	all_saved_data->launch_engine_data.remove_debugger_monitor = DEFAULT_REMOVEDEBUGGERMONITOR;
 	all_saved_data->autoboot = DEFAULT_AUTOBOOT;
 }
 
 void reset_all_options_data(struct all_options_data_t* all_options_data) {
 	reset_all_saved_data(&all_options_data->all_saved_data);
 	all_options_data->save_to_filepath = 0;
-	all_options_data->reset_to_ds_mode = 0;
-	all_options_data->reset_to_dsi_mode = 0;
-	all_options_data->reset_to_defaults = 0;
+	all_options_data->reset_to_defaults = DEFAULT_VALUE_GENERIC;
 	all_options_data->cursor_index = 0;
 }
 
@@ -227,6 +309,25 @@ static void convert_saved_data_t1_1_to_t1_2(struct all_saved_data_t* all_saved_d
 	all_saved_data->launch_engine_data.sleepMode = old_saved_data.launch_engine_data.sleepMode;
 	all_saved_data->launch_engine_data.redirectPowerButton = DEFAULT_REDIRECTPOWERBUTTON;
 	all_saved_data->autoboot = old_saved_data.autoboot;
+	all_saved_data->version = SAVED_VERSION;
+}
+
+static void convert_saved_data_t1_2_to_t1_3(struct all_saved_data_t* all_saved_data) {
+	all_saved_data_t_1_2 old_saved_data = *((all_saved_data_t_1_2*)all_saved_data);
+	all_saved_data->launch_engine_data.scfgUnlock = old_saved_data.launch_engine_data.scfgUnlock;
+	all_saved_data->launch_engine_data.sdaccess = old_saved_data.launch_engine_data.sdaccess;
+	all_saved_data->launch_engine_data.twlmode = old_saved_data.launch_engine_data.twlmode;
+	all_saved_data->launch_engine_data.twlclk = old_saved_data.launch_engine_data.twlclk;
+	all_saved_data->launch_engine_data.twlvram = old_saved_data.launch_engine_data.twlvram;
+	all_saved_data->launch_engine_data.twltouch = old_saved_data.launch_engine_data.twltouch;
+	all_saved_data->launch_engine_data.soundFreq = old_saved_data.launch_engine_data.soundFreq;
+	all_saved_data->launch_engine_data.runCardEngine = old_saved_data.launch_engine_data.runCardEngine;
+	all_saved_data->launch_engine_data.language = old_saved_data.launch_engine_data.language;
+	all_saved_data->launch_engine_data.sleepMode = old_saved_data.launch_engine_data.sleepMode;
+	all_saved_data->launch_engine_data.redirectPowerButton = old_saved_data.launch_engine_data.redirectPowerButton;
+	all_saved_data->autoboot = old_saved_data.autoboot;
+	all_saved_data->launch_engine_data.cartridge_read_type = DEFAULT_VALUE_GENERIC;
+	all_saved_data->launch_engine_data.remove_debugger_monitor = DEFAULT_REMOVEDEBUGGERMONITOR;
 	all_saved_data->version = SAVED_VERSION;
 }
 
@@ -280,10 +381,17 @@ static void set_default_val(int* value, uint8_t default_ds, uint8_t default_dsi)
 		*value = is_dsi_cartridge() ? default_dsi : default_ds;
 }
 
-static void setup_defaults(struct launch_engine_data_t* launch_engine_data, bool is_3ds) {
+static void setup_defaults(struct launch_engine_data_t* launch_engine_data, bool is_3ds, bool is_on_debugger) {
 	// Impossible to do this on 3DS...
 	if(is_3ds)
 		launch_engine_data->redirectPowerButton = 0;
+
+	if(!is_on_debugger) {
+		launch_engine_data->cartridge_read_type = CARTRIDGETYPE_RETAIL;
+		launch_engine_data->remove_debugger_monitor = 1;
+	}
+	if(launch_engine_data->cartridge_read_type == DEFAULT_VALUE_GENERIC)
+		launch_engine_data->cartridge_read_type = CARTRIDGETYPE_AUTODETECT;
 
 	if(!isDSiMode()) {
 		launch_engine_data->scfgUnlock = 0;
@@ -328,25 +436,27 @@ bool is_card_ready(bool do_read) {
 	return is_ready;
 }
 
-static int** get_settings_options(size_t* size_to_set, bool is_3ds) {
-	int **settings_options = settings_options_dsi;
-	size_t size_settings = NUM_SETTINGS_OPTIONS_DSI;
-	if(!isDSiMode()) {
-		if(isRAMDoubled()) {
-			settings_options = settings_options_isne;
-			size_settings = NUM_SETTINGS_OPTIONS_ISNE;
-		}
-		else {
-			settings_options = settings_options_ds;
-			size_settings = NUM_SETTINGS_OPTIONS_DS;
-		}
+static void populate_settings_options(bool is_3ds, bool is_on_debugger) {
+	num_available_settings = 0;
+	bool is_ds = !isDSiMode();
+	bool is_dsi = isDSiMode() && (!is_3ds);
+
+	for(size_t i = 0; i < NUM_TOTAL_POSSIBLE_SETTINGS; i++) {
+		if(is_ds && (!settings_list[i]->ds_usable))
+			continue;
+		if(is_dsi && (!settings_list[i]->dsi_usable))
+			continue;
+		if(is_3ds && (!settings_list[i]->_3ds_usable))
+			continue;
+		if((!is_on_debugger) && settings_list[i]->debugger_specific)
+			continue;
+		available_settings[num_available_settings++] = settings_list[i]->setting_ptr;
 	}
-	else if(is_3ds) {
-		settings_options = settings_options_3ds;
-		size_settings = NUM_SETTINGS_OPTIONS_3DS;
-	}
-	*size_to_set = size_settings;
-	return settings_options;
+}
+
+static int** get_settings_options(size_t* size_to_set) {
+	*size_to_set = num_available_settings;
+	return available_settings;
 }
 
 static void update_console_x_pos() {
@@ -356,12 +466,12 @@ static void update_console_x_pos() {
 	consoleSetCursor(NULL, SETTING_OPTIONS_VALUE_X_POSITION, y);
 }
 
-void print_setting_option_three(int value, const char* option_name, const char* off_value, const char* on_value, const char* force_value) {
+void print_setting_option_three(int value, const char* option_name, const char* off_value, const char* on_value, const char* force_value, const char* default_value) {
 	PRINT_FUNCTION(option_name);
 	PRINT_FUNCTION(":");
 	update_console_x_pos();
 	if(value == DEFAULT_VALUE_GENERIC)
-		PRINT_FUNCTION("Default");
+		PRINT_FUNCTION(default_value);
 	else if(value == 0)
 		PRINT_FUNCTION(off_value);
 	else if(value == 1)
@@ -370,16 +480,24 @@ void print_setting_option_three(int value, const char* option_name, const char* 
 		PRINT_FUNCTION(force_value);
 }
 
-void print_setting_option(int value, const char* option_name, const char* off_value, const char* on_value) {
+void print_setting_option_three_default(int value, const char* option_name, const char* off_value, const char* on_value, const char* force_value) {
+	print_setting_option_three(value, option_name, off_value, on_value, force_value, "Default");
+}
+
+void print_setting_option(int value, const char* option_name, const char* off_value, const char* on_value, const char* default_value) {
 	PRINT_FUNCTION(option_name);
 	PRINT_FUNCTION(":");
 	update_console_x_pos();
 	if(value == DEFAULT_VALUE_GENERIC)
-		PRINT_FUNCTION("Default");
+		PRINT_FUNCTION(default_value);
 	else if(value == 0)
 		PRINT_FUNCTION(off_value);
 	else
 		PRINT_FUNCTION(on_value);
+}
+
+void print_setting_option_default(int value, const char* option_name, const char* off_value, const char* on_value) {
+	print_setting_option(value, option_name, off_value, on_value, "Default");
 }
 
 static void print_language_to_console(int* language_selected) {
@@ -390,7 +508,7 @@ static void print_language_to_console(int* language_selected) {
 	PRINT_FUNCTION(languages_strings[(*language_selected) + 1]);
 }
 
-void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_data, bool can_save, bool is_3ds) {
+void print_data(uint16_t devunit_type, struct all_options_data_t* all_options_data, bool can_save, bool is_3ds) {
 	swiWaitForVBlank();
 	consoleClear();
 	int ram_size = 4;
@@ -403,14 +521,11 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 	}
 	else
 		PRINT_FUNCTION ("DS - ");
-	if(isRAMDoubled()) {
+	if(isRAMDoubled())
 		ram_size *= 2;
-		if(!isDSiMode())
-			debugger_type = 1;
-	}
 
 	PRINT_FUNCTION ("%dMB RAM", ram_size);
-	if(debugger_type)
+	if(devunit_type)
 		PRINT_FUNCTION (" - Dev\n");
 	else
 		PRINT_FUNCTION (" - Retail\n");
@@ -445,7 +560,7 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 	PRINT_FUNCTION("\nName: %s\n", name);
 
 	size_t size_settings = 0;
-	int **settings_options = get_settings_options(&size_settings, is_3ds);
+	int **settings_options = get_settings_options(&size_settings);
 	PRINT_FUNCTION("Settings:");
 	for(size_t i = 0; i < size_settings; i++) {
 		PRINT_FUNCTION("\n ");
@@ -454,41 +569,39 @@ void print_data(uint16_t debugger_type, struct all_options_data_t* all_options_d
 		else
 			PRINT_FUNCTION(" ");
 		if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twlmode))
-			print_setting_option_three(*settings_options[i], "DS/DSi Mode", "DS", "DSi", "Force DSi");
+			print_setting_option_three_default(*settings_options[i], "DS/DSi Mode", "DS", "DSi", "Force DSi");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twlclk))
-			print_setting_option(*settings_options[i], "CPU Speed", "67MHz", "133MHz");
+			print_setting_option_default(*settings_options[i], "CPU Speed", "67MHz", "133MHz");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twlvram))
-			print_setting_option(*settings_options[i], "VRAM Boost", "Off", "On");
+			print_setting_option_default(*settings_options[i], "VRAM Boost", "Off", "On");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.twltouch))
-			print_setting_option(*settings_options[i], "Touchscreen", "DS", "DSi");
+			print_setting_option_default(*settings_options[i], "Touchscreen", "DS", "DSi");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.sdaccess))
-			print_setting_option(*settings_options[i], "SD Access", "Off", "On");
+			print_setting_option_default(*settings_options[i], "SD Access", "Off", "On");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.soundFreq))
-			print_setting_option(*settings_options[i], "Sound Freq.", "32KHz", "48KHz");
+			print_setting_option_default(*settings_options[i], "Sound Freq.", "32KHz", "48KHz");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.scfgUnlock))
-			print_setting_option(*settings_options[i], "SCFG", "Locked", "Unlocked");
+			print_setting_option_default(*settings_options[i], "SCFG", "Locked", "Unlocked");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.sleepMode))
-			print_setting_option(*settings_options[i], "Sleep", "Off", "On");
+			print_setting_option_default(*settings_options[i], "Sleep", "Off", "On");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.runCardEngine))
-			print_setting_option(*settings_options[i], "CardEngine", "Disabled", "Allowed");
+			print_setting_option_default(*settings_options[i], "CardEngine", "Disabled", "Allowed");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.redirectPowerButton))
-			print_setting_option(*settings_options[i], "Power Button", "Main menu", "Reset game");
+			print_setting_option_default(*settings_options[i], "Power Button", "Main menu", "Reset game");
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.language))
 			print_language_to_console(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.autoboot))
-			print_setting_option(*settings_options[i], "Autoboot", "Off", "On");
+			print_setting_option_default(*settings_options[i], "Autoboot", "Off", "On");
 		else if(settings_options[i] == (&all_options_data->save_to_filepath)) {
 			if(can_save)
-				print_setting_option(*settings_options[i], "Save default to", "SD", "NAND");
+				print_setting_option_default(*settings_options[i], "Save default to", "SD", "NAND");
 			else
 				PRINT_FUNCTION("Impossible to save default");
 		}
-		else if(settings_options[i] == (&all_options_data->reset_to_ds_mode))
-			PRINT_FUNCTION("Set DS Mode Defaults");
-		else if(settings_options[i] == (&all_options_data->reset_to_dsi_mode))
-			PRINT_FUNCTION("Set DSi Mode Defaults");
+		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.cartridge_read_type))
+			print_setting_option(*settings_options[i], "Cartridge Type", "Regular", "Emulated", "Auto-detect");
 		else if(settings_options[i] == (&all_options_data->reset_to_defaults))
-			PRINT_FUNCTION("Set Default Settings");
+			print_setting_option(*settings_options[i], "Reset Settings", "to DS mode", "to DSi mode", "to Default");
 		if(((size_t)all_options_data->cursor_index) == i)
 			PRINT_FUNCTION(">");
 	}
@@ -518,7 +631,7 @@ static bool read_data_from_path(const char* filepath, struct all_options_data_t*
 
 	if(read_data != sizeof(struct all_saved_data_t)) {
 		// Try reading v1 data regardless...
-		if((read_data != sizeof(struct all_saved_data_t_1_0)) && (read_data != sizeof(struct all_saved_data_t_1_1))) {
+		if((read_data != sizeof(struct all_saved_data_t_1_0)) && (read_data != sizeof(struct all_saved_data_t_1_1)) && (read_data != sizeof(struct all_saved_data_t_1_2))) {
 			reset_all_options_data(all_options_data);
 			return false;
 		}
@@ -529,13 +642,17 @@ static bool read_data_from_path(const char* filepath, struct all_options_data_t*
 	if(main_and_sub_version != (SAVED_VERSION >> 16)) {
 		// For now, accept v0 and v1... The data is properly formatted at the start
 		// of the file...
-		if((main_and_sub_version == OLD_LAUNCH_ENGINE_DATA_V0) || (main_and_sub_version == OLD_LAUNCH_ENGINE_DATA_V1)) {
+		bool converted_to_latest = false;
+		if((main_and_sub_version == OLD_LAUNCH_ENGINE_DATA_V0) || (main_and_sub_version == OLD_LAUNCH_ENGINE_DATA_V1))
 			convert_saved_data_t0_t1_to_t1_1((struct all_saved_data_t_1_1*)&all_options_data->all_saved_data);
+		if(main_and_sub_version <= OLD_LAUNCH_ENGINE_DATA_V1_1)
 			convert_saved_data_t1_1_to_t1_2(&all_options_data->all_saved_data);
+		if(main_and_sub_version <= OLD_LAUNCH_ENGINE_DATA_V1_2) {
+			convert_saved_data_t1_2_to_t1_3(&all_options_data->all_saved_data);
+			converted_to_latest = true;
 		}
-		else if(main_and_sub_version == OLD_LAUNCH_ENGINE_DATA_V1_1)
-			convert_saved_data_t1_1_to_t1_2(&all_options_data->all_saved_data);
-		else {
+
+		if(!converted_to_latest) {
 			reset_all_options_data(all_options_data);
 			return false;
 		}
@@ -562,12 +679,12 @@ static void fix_data_bool_val(int* value) {
 		*value = 0;
 }
 
-static void input_processing(u32 curr_keys, struct all_options_data_t* all_options_data, bool has_sd_access, bool has_nand_access, bool is_3ds, std::string &base_title_nand_path) {
+static void input_processing(u32 curr_keys, struct all_options_data_t* all_options_data, bool has_sd_access, bool has_nand_access, std::string &base_title_nand_path) {
 	if((curr_keys & KEY_X) || (curr_keys & KEY_Y) || (curr_keys & KEY_L) || (curr_keys & KEY_R))
 		cartridge_read_header_data_total();
 
 	size_t size_settings = 0;
-	int **settings_options = get_settings_options(&size_settings, is_3ds);
+	int **settings_options = get_settings_options(&size_settings);
 
 	if(curr_keys & KEY_UP)
 		all_options_data->cursor_index -= 1;
@@ -602,6 +719,8 @@ static void input_processing(u32 curr_keys, struct all_options_data_t* all_optio
 			fix_data_two_val_default(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.scfgUnlock))
 			fix_data_two_val_default(settings_options[i]);
+		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.cartridge_read_type))
+			fix_data_two_val_default(settings_options[i]);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.language))
 			fix_data_x_val_default(settings_options[i], NUM_LANGUAGES_DS);
 		else if(settings_options[i] == (&all_options_data->all_saved_data.launch_engine_data.runCardEngine))
@@ -620,6 +739,12 @@ static void input_processing(u32 curr_keys, struct all_options_data_t* all_optio
 				*settings_options[i] = 1;
 			else
 				fix_data_bool_val(settings_options[i]);
+		}
+		if(settings_options[i] == (&all_options_data->reset_to_defaults)) {
+			if(!isDSiMode())
+				*settings_options[i] = DEFAULT_VALUE_GENERIC;
+			else
+				fix_data_two_val_default(settings_options[i]);
 		}
 	}
 	if(curr_keys & KEY_A) {
@@ -640,12 +765,16 @@ static void input_processing(u32 curr_keys, struct all_options_data_t* all_optio
 				nand_WriteProtect(true);
 			}
 		}
-		if(settings_options[i] == (&all_options_data->reset_to_ds_mode))
-			reset_launch_engine_data_to_dsx(&all_options_data->all_saved_data.launch_engine_data, true);
-		else if(settings_options[i] == (&all_options_data->reset_to_dsi_mode))
-			reset_launch_engine_data_to_dsx(&all_options_data->all_saved_data.launch_engine_data, false);
-		else if(settings_options[i] == (&all_options_data->reset_to_defaults))
-			reset_all_saved_data(&all_options_data->all_saved_data);
+		if(settings_options[i] == (&all_options_data->reset_to_defaults)) {
+			// Undo generic "to the right" from general code above
+			*settings_options[i] -= 1;
+			if(*settings_options[i] == 0)
+				reset_launch_engine_data_to_dsx(&all_options_data->all_saved_data.launch_engine_data, true);
+			else if(*settings_options[i] == 1)
+				reset_launch_engine_data_to_dsx(&all_options_data->all_saved_data.launch_engine_data, false);
+			else
+				reset_all_saved_data(&all_options_data->all_saved_data);
+		}
 	}
 }
 
@@ -733,7 +862,7 @@ int main(int argc, char **argv) {
 	fifoSendValue32(FIFO_PM, PM_REQ_SLEEP_DISABLE);
 
 	reset_all_options_data(&all_options_data);
-	uint16_t debugger_type = 0;
+	uint16_t devunit_type = 0;
 
 	// Reset cheat data, since we won't be using it regardless...
 	clean_cheat_data(0x023F0000);
@@ -747,6 +876,7 @@ int main(int argc, char **argv) {
 	bool done = false;
 	bool booted_from_nand = false;
 	bool is_3ds = false;
+	bool is_on_debugger = false;
 	uint32_t boot_type = CARDENGINE_BOOT_TYPE_NOT_SUPPORTED;
 	std::string base_title_nand_path = "";
 	if((argc > 0) && isDSiMode()) {
@@ -788,8 +918,15 @@ int main(int argc, char **argv) {
 
 	while(!fifoCheckValue32(FIFO_USER_01));
 	uint32_t fifo_arm7 = fifoGetValue32(FIFO_USER_01);
-	debugger_type = fifo_arm7 & 0xFFFF;
+	devunit_type = fifo_arm7 & 0xFFFF;
 	is_3ds = fifo_arm7 & 0x10000;
+
+	if(isDSiMode())
+		is_on_debugger = (!is_3ds) && isRAMDoubled(); // The DSi BIOS only checks for this... And not for the devunit register
+	else {
+		devunit_type = isRAMDoubled() ? 1 : 0;
+		is_on_debugger = isRAMDoubled(); // The BIOS also checks with a SIO handshake... I was unable to trigger it after the first one post-reset
+	}
 
 	sysSetCardOwner(BUS_OWNER_ARM9);
 
@@ -813,7 +950,8 @@ int main(int argc, char **argv) {
 	if(!done) {
 		videoSetMode(MODE_0_2D);
 		consoleDemoInit();
-		print_data(debugger_type, &all_options_data, has_sd_access || has_nand_access, is_3ds);
+		populate_settings_options(is_3ds, is_on_debugger);
+		print_data(devunit_type, &all_options_data, has_sd_access || has_nand_access, is_3ds);
 	}
 	while(!done) {
 		do {
@@ -822,16 +960,16 @@ int main(int argc, char **argv) {
 			curr_keys = keysDown();
 		} while(!(curr_keys & ( KEY_X | KEY_Y | KEY_R | KEY_L | KEY_LEFT | KEY_RIGHT | KEY_UP | KEY_DOWN | KEY_A | KEY_START)));
 
-		input_processing(curr_keys, &all_options_data, has_sd_access, has_nand_access, is_3ds, base_title_nand_path);
-		print_data(debugger_type, &all_options_data, has_sd_access || has_nand_access, is_3ds);
+		input_processing(curr_keys, &all_options_data, has_sd_access, has_nand_access, base_title_nand_path);
+		print_data(devunit_type, &all_options_data, has_sd_access || has_nand_access, is_3ds);
 
 		if(curr_keys & KEY_START) {
 			done = is_card_ready(true);
 		}
 	}
 
-	setup_defaults(&all_options_data.all_saved_data.launch_engine_data, is_3ds);
-	runLaunchEngine(&all_options_data.all_saved_data.launch_engine_data, boot_type, ((argc > 0) && isDSiMode()) ? argv[0] : NULL, is_dsi_cartridge());
+	setup_defaults(&all_options_data.all_saved_data.launch_engine_data, is_3ds, is_on_debugger);
+	runLaunchEngine(&all_options_data.all_saved_data.launch_engine_data, boot_type, ((argc > 0) && isDSiMode()) ? argv[0] : NULL, is_dsi_cartridge(), is_3ds, is_on_debugger);
 
 	return 0;
 }
