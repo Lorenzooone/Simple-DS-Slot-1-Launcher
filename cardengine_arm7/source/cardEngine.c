@@ -71,6 +71,7 @@ void myIrqHandlerVBlank(void) {
 		REG_MASTER_VOLUME = 0;
 		int oldIME = enterCriticalSection();
 		setRebootParams(cardengine_main_data, &boot_path, &reset_data);
+		i2cWriteRegister(0x4a,0x12, i2cReadRegister(0x4a, 0x12) | 1); // 3DS - is_twl - Do not trust gbatek for this register - Thanks TuxSH!
 		i2cWriteRegister(0x4a,0x70,0x01);
 		i2cWriteRegister(0x4a,0x11,0x01);	// Reboot game
 		leaveCriticalSection(oldIME);
